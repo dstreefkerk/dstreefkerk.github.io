@@ -1,8 +1,8 @@
 ---
 layout: post
-title: "Linux Command Reference for System Troubleshooting"
+title: "Command Reference for Linux-based AMA troubleshooting"
 date: 2025-05-09
-categories: [linux, azure, monitoring, troubleshooting]
+categories: [linux, azure, monitoring, troubleshooting, sentinel, AMA]
 tags: [azure-monitor-agent, syslog, disk-space, networking, commands]
 author: "Daniel Streefkerk"
 excerpt: "Essential Linux commands for troubleshooting disk space, syslog, and Azure Monitor Agent connectivity issues, updated for May 2025."
