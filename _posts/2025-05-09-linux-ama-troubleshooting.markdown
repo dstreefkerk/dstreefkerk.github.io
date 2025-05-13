@@ -180,11 +180,10 @@ journalctl -u azuremonitoragent --since -1h      # Check last hour of AMA servic
 ### Validate DCR Configuration
 ```bash
 # Check for text and JSON log configurations in DCR fragments
-jq '.dataSources | with_entries(select(.key|test("textLogs|jsonLogs")))' \
-   /etc/opt/microsoft/azuremonitoragent/config-cache/configchunks/*.json
+sudo sh -c 'jq --color-output . /etc/opt/microsoft/azuremonitoragent/config-cache/configchunks/*.json'
 
 # List all DCR chunks downloaded to the VM
-ls -la /etc/opt/microsoft/azuremonitoragent/config-cache/configchunks/
+sudo ls -la /etc/opt/microsoft/azuremonitoragent/config-cache/configchunks/
 
 # Check DCR association from Azure CLI
 az monitor data-collection rule association list \
@@ -194,7 +193,7 @@ az monitor data-collection rule association list \
 ### Inspect Fluent Bit Configuration
 ```bash
 # View Fluent Bit configuration paths
-ls -la /etc/opt/microsoft/azuremonitoragent/config-cache/fluentbit/
+sudo ls -la /etc/opt/microsoft/azuremonitoragent/config-cache/fluentbit/
 
 # Check INPUT sections in Fluent Bit config (shows monitored files)
 grep -A3 -B1 '\[INPUT\]' /etc/opt/microsoft/azuremonitoragent/config-cache/fluentbit/*.conf | less
