@@ -36,6 +36,7 @@ plugins:
 
 permalink: /:year-:month-:slug/
 show_excerpts: true
+timezone: Australia/Sydney
 
 # Exclude from processing.
 # The following items will not be processed, by default.
