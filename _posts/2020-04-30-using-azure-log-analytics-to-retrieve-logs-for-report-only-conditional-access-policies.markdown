@@ -18,16 +18,7 @@ This KQL query grabs all sign-ins that have failed a report-only conditional acc
 
 Here's the KQL query code:
 
-```kusto
-SigninLogs
-| mvexpand ConditionalAccessPolicies
-| where ConditionalAccessPolicies.result == "reportOnlyFailure"
-| project TimeGenerated, UserPrincipalName, AppDisplayName, ClientAppUsed, ConditionalAccessStatus, 
-    PolicyName = ConditionalAccessPolicies.displayName,
-    PolicyResult = ConditionalAccessPolicies.result,
-    PolicyCondition = ConditionalAccessPolicies.conditionsSatisfied,
-    PolicyControlResult = ConditionalAccessPolicies.enforcedGrantControls
-```
+<script src="https://gist.github.com/dstreefkerk/d32a06442ee884a51062cc06f87886e3.js"></script>
 
 To explain what the query does:
 
