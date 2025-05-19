@@ -7,7 +7,6 @@ tags: [claude-code, anthropic, nvm, bash, cli, windows]
 author: "Daniel Streefkerk"
 excerpt: "How to reliably call Claude Code CLI from Windows PowerShell when it's installed in WSL under Node.js via NVM, preserving context and working directory."
 ---
-# Using Claude Code's SDK from Windows PowerShell
 
 Anthropic just announced the [Claude Code SDK](https://docs.anthropic.com/en/docs/claude-code/sdk) overnight, although it's already been available for a while in preview.
 
