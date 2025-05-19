@@ -5,7 +5,7 @@ date: 2020-04-30
 categories: [security, azure]
 tags: [azure, azuread, azure-monitor, conditional-access, kql, log-analytics]
 author: "Daniel Streefkerk"
-excerpt: "How to use Azure Monitor and KQL queries to analyze sign-ins affected by report-only conditional access policies in Azure AD."
+excerpt: "How to use Azure Monitor and KQL queries to analyse sign-ins affected by report-only conditional access policies in Azure AD."
 ---
 
 I've recently been working on reviewing conditional access policies in Azure AD. Thankfully this process has become much easier than the early days with the introduction of [Azure Monitor](https://azure.microsoft.com/en-us/services/monitor/) and [Report-Only mode](https://docs.microsoft.com/en-us/azure/active-directory/conditional-access/concept-conditional-access-report-only) conditional access policies which allow you to properly pilot a configuration before going live.
