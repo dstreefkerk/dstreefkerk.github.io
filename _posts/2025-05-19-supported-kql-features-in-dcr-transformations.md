@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Supported KQL Features in Azure Monitor Data Collection Rule (DCR) Transformations"
-date: 2025-05-20
+date: 2025-05-19
 categories: [cloud, azure, sentinel, monitoring]
 tags: [kql, azure-monitor, dcr, transformations, log-analytics, reference]
 author: "Daniel Streefkerk"
