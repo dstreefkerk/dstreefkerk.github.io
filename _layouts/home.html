@@ -1,0 +1,63 @@
+---
+layout: default
+---
+
+<div class="home">
+  <!-- Remove or comment out this conditional heading since it's redundant -->
+  {%- if page.title and page.show_title != false -%}
+    <h1 class="page-heading">{{ page.title }}</h1>
+  {%- endif -%}
+
+  {{ content }}
+
+  {%- if site.posts.size > 0 -%}
+    <h2 class="post-list-heading">{{ page.list_title | default: "Posts" }}</h2>
+    <ul class="post-list">
+      {%- for post in paginator.posts -%}
+      <li>
+        {%- assign date_format = site.minima.date_format | default: "%b %-d, %Y" -%}
+        <span class="post-meta">{{ post.date | date: date_format }}</span>
+        <h3>
+          <a class="post-link" href="{{ post.url | relative_url }}">
+            {{ post.title | escape }}
+          </a>
+        </h3>
+        {%- if site.show_excerpts -%}
+          {{ post.excerpt }}
+        {%- endif -%}
+      </li>
+      {%- endfor -%}
+    </ul>
+
+    <!-- Pagination links -->
+    {%- if paginator.total_pages > 1 -%}
+    <div class="pagination">
+      {% if paginator.previous_page %}
+        <a href="{{ paginator.previous_page_path | relative_url }}" class="previous">
+          <span>&laquo;</span> Previous
+        </a>
+      {% else %}
+        <span class="previous disabled">
+          <span>&laquo;</span> Previous
+        </span>
+      {% endif %}
+
+      <span class="page-number">
+        Page {{ paginator.page }} of {{ paginator.total_pages }}
+      </span>
+
+      {% if paginator.next_page %}
+        <a href="{{ paginator.next_page_path | relative_url }}" class="next">
+          Next <span>&raquo;</span>
+        </a>
+      {% else %}
+        <span class="next disabled">
+          Next <span>&raquo;</span>
+        </span>
+      {% endif %}
+    </div>
+    {%- endif -%}
+
+    <p class="rss-subscribe">subscribe <a href="{{ "/feed.xml" | relative_url }}">via RSS</a></p>
+  {%- endif -%}
+</div>

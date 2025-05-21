@@ -34,6 +34,10 @@ theme: minima
 plugins:
   - jekyll-feed
 
+# Pagination settings
+paginate: 10
+paginate_path: "/page/:num/"
+
 permalink: /:year-:month-:slug/
 show_excerpts: true
 timezone: Australia/Sydney

@@ -1,0 +1,43 @@
+---
+# Only the main Sass file needs front matter (the dashes are enough)
+---
+
+@import "minima";
+
+// Your custom styles go here
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  margin: 30px 0;
+  padding: 15px 0;
+  border-top: 1px solid #e8e8e8;
+  border-bottom: 1px solid #e8e8e8;
+}
+
+.pagination a {
+  color: #2a7ae2;
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  background-color: #f8f9fa;
+}
+
+.pagination a:hover {
+  background-color: #e9ecef;
+  text-decoration: none;
+}
+
+.pagination .previous,
+.pagination .next {
+  font-weight: 500;
+}
+
+.pagination .disabled {
+  color: #6c757d;
+  padding: 8px 16px;
+}
+
+.pagination .page-number {
+  align-self: center;
+  color: #6c757d;
+}
