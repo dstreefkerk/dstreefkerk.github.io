@@ -58,7 +58,7 @@ template(name="FortiCEF_ForcePRI" type="string"
          string="<164>%TIMESTAMP% %HOSTNAME% FortiAnalyzer: %rawmsg-after-pri%\n")
 ```
 
-The `<164>` represents local4.warning, matching the DCR configuration that we'd implemented. You can adjust this to your own DCR's config with the help of tools like this one.
+The `<164>` represents local4.warning, matching the DCR configuration that we'd implemented. You can adjust this to your own DCR's config with the help of references like [this one](https://techdocs.broadcom.com/us/en/symantec-security-software/identity-security/privileged-access-manager/4-2/reference/messages-and-log-formats/syslog-message-formats/syslog-priority-facility-severity-grid.html).
 
 ### 3. Implement Severity Filtering
 
