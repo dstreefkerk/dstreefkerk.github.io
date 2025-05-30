@@ -8,7 +8,7 @@ author: "Anthropic Claude"
 excerpt: "AI-generated research on how expired or unregistered domains in SPF records create severe vulnerabilities that enable email authentication bypass and sophisticated phishing attacks."
 ---
 
-> **Note:** This is AI-generated deep research report that Claude helped me compile for a project I'm working on. I thought the information might be useful to others dealing with email security, so I'm sharing it here. While AI-generated, the technical details and sources are accurate as of May 2025.
+> **Note:** This is AI-generated deep research report that Claude helped me compile for a personal side project I'm working on. I thought the information might be useful to others dealing with email security, so I'm sharing it here. While AI-generated, the technical details and sources are accurate as of May 2025.
 
 ## SPF unregistered domain vulnerabilities represent critical email authentication bypass risks
 
