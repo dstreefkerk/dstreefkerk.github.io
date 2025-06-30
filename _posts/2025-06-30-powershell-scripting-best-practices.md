@@ -147,7 +147,12 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **PowerShell Constrained Language Mode (CLM):** Be aware of CLM if operating in locked-down environments (like WDAC enforcement). In CLM, some .NET methods, COM objects, and Add-Type are blocked. Best practice is to avoid relying on those in critical scripts or detect CLM via `$ExecutionContext.SessionState.LanguageMode` and warn the user. Prefer using approved cmdlets or .NET classes that are allowed. This ensures your script runs even under constrained settings (Good to Have for highly secure contexts).
 
-**Anti-Patterns:** Hardcoding credentials or other secrets in plain text (one of the worst security sins) – not only can they be extracted from the script, but they might end up in version control or backups. Also, avoid using outdated or vulnerable protocols in scripts (e.g. forcing TLS 1.0, or using basic auth over HTTP) – instead update to use TLS 1.2/1.3 and secure APIs. Don't disable PowerShell security features for convenience: for example, setting `Set-ExecutionPolicy Unrestricted` or bypassing CLM without approval can expose the enterprise to risk. Another anti-pattern is not validating inputs that are used in sensitive operations (e.g., taking a user input and directly using it in a file path or SQL query) – always validate or sanitise inputs to prevent injection or abuse. Lastly, **do not log sensitive info** like passwords or private keys – logs often go to systems that many can read.
+**Anti-Patterns:** 
+- Hardcoding credentials or other secrets in plain text (one of the worst security sins) – not only can they be extracted from the script, but they might end up in version control or backups. 
+- Avoid using outdated or vulnerable protocols in scripts (e.g. forcing TLS 1.0, or using basic auth over HTTP) – instead update to use TLS 1.2/1.3 and secure APIs. 
+- Don't disable PowerShell security features for convenience: for example, setting `Set-ExecutionPolicy Unrestricted` or bypassing CLM without approval can expose the enterprise to risk. 
+- Another anti-pattern is not validating inputs that are used in sensitive operations (e.g., taking a user input and directly using it in a file path or SQL query) – always validate or sanitise inputs to prevent injection or abuse. 
+- Lastly, **do not log sensitive info** like passwords or private keys – logs often go to systems that many can read.
 
 ## Module and Dependency Management
 
