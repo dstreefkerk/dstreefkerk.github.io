@@ -26,7 +26,9 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **Source Control Integration:** Organise scripts in source control with logical naming and structure. Use **descriptive file names** (e.g. `Backup-UserHomeDirs.ps1` instead of `script1.ps1`) that reflect their purpose. Group related scripts into folders or PowerShell modules for easier versioning. Include metadata like version, author, last modified date either in a `.NOTES` section of comment-based help or in a module manifest. This helps track changes and ensure the right script versions are deployed (Good to Have).
 
-**Anti-Patterns to Avoid:** Writing one monolithic script without structure or help (hard to reuse or debug), using inconsistent naming/indentation (reduces readability), or relying on implicit behaviour (like uninitialised variables) instead of explicit `Set-StrictMode` and clear code (these can lead to subtle bugs). Also avoid leaving behind state (e.g. not cleaning up temporary files or credentials) – always include a cleanup step if needed.
+**Anti-Patterns to Avoid:** 
+- Writing one monolithic script without structure or help (hard to reuse or debug), using inconsistent naming/indentation (reduces readability), or relying on implicit behaviour (like uninitialised variables) instead of explicit `Set-StrictMode` and clear code (these can lead to subtle bugs). 
+- Also avoid leaving behind state (e.g. not cleaning up temporary files or credentials) – always include a cleanup step if needed.
 
 ## Cmdlet and Function Design
 
@@ -51,7 +53,12 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **Consistent Usage of Objects:** Wherever possible, follow common cmdlet patterns. For instance, if your function has to output different object types based on a parameter, consider splitting into separate functions or use parameter sets (with distinct OutputType) to keep output predictable. Also, avoid mixing multiple object types in one output stream, as that can confuse formatting and consumers. If truly necessary (e.g. an internal helper returns two related types), document it clearly or output them as a single combined object.
 
-**Anti-Patterns:** Avoid using unapproved verbs or abbreviations (e.g. "Do-Something" or "Get-ADInfo" where verb or noun is not clear) – it's confusing and may trigger warnings. Don't hardcode output to text with format commands or string concatenation – this reduces reusability. Never use `Write-Host` to produce output data (only for user prompts or progress). Not implementing `-WhatIf` on a destructive function is a missed safeguard; it's better to include it (the PSScriptAnalyzer rule **UseShouldProcessForStateChangingFunctions** flags this). Also, avoid making functions that both perform an action and also prompt for input within – separate the data retrieval from action so they can be automated without interactive prompts (e.g. provide parameters for all inputs).
+**Anti-Patterns:** 
+- Avoid using unapproved verbs or abbreviations (e.g. "Do-Something" or "Get-ADInfo" where verb or noun is not clear) – it's confusing and may trigger warnings. 
+- Don't hardcode output to text with format commands or string concatenation – this reduces reusability. 
+- Never use `Write-Host` to produce output data (only for user prompts or progress). 
+- Not implementing `-WhatIf` on a destructive function is a missed safeguard; it's better to include it (the PSScriptAnalyzer rule **UseShouldProcessForStateChangingFunctions** flags this). 
+- Also, avoid making functions that both perform an action and also prompt for input within – separate the data retrieval from action so they can be automated without interactive prompts (e.g. provide parameters for all inputs).
 
 ## Parameter Handling
 
@@ -116,7 +123,11 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **Use Flags/Return Codes Judiciously:** Rather than setting flags like `$success = $false` in catch and checking after, prefer structuring logic so that you do all necessary steps in the `try` and handle failures in one place (the catch). The **ERR-03** guideline suggests avoiding "flag variables" for error handling, and instead wrapping the entire transactional sequence in one try/catch. This makes code more linear and clear. For example, do not do: `try { $ok=$true; Step1 -EA Stop } catch { $ok=$false } if($ok){ Step2; Step3 }`. Instead, do `try { Step1; Step2; Step3; } catch { ... handle ... }`.
 
-**Anti-Patterns:** Relying on `$?` to detect errors – `$?` only tells if the last command considered itself successful, which might be misleading and it carries no error details. It's better to use try/catch or check `$Error[0]`. Avoid catching generic `Exception` and then doing nothing or just writing a general message – you lose the specific error context. Never ignore errors by piping to `Out-Null` or `>$null` without justification; if a command's output is not needed, that's fine, but if you're doing it just to avoid an error, handle the error instead. Finally, don't overuse `Write-Host` for error reporting – use `Write-Error` or `throw` so that errors are properly captured in logs/streams and can be handled by callers.
+**Anti-Patterns:** 
+- Relying on `$?` to detect errors – `$?` only tells if the last command considered itself successful, which might be misleading and it carries no error details. It's better to use try/catch or check `$Error[0]`. 
+- Avoid catching generic `Exception` and then doing nothing or just writing a general message – you lose the specific error context. 
+- Never ignore errors by piping to `Out-Null` or `>$null` without justification; if a command's output is not needed, that's fine, but if you're doing it just to avoid an error, handle the error instead. 
+- Finally, don't overuse `Write-Host` for error reporting – use `Write-Error` or `throw` so that errors are properly captured in logs/streams and can be handled by callers.
 
 ## Security and Compliance
 
@@ -192,7 +203,11 @@ Note that Microsoft don't view the Execution Policy as a security boundary, nor 
 
 * **Module Availability:** Be aware that some Microsoft modules are only for Windows PowerShell (e.g., AzureAD module is 5.1 only, whereas Az module works on 7+). If your script must use AzureAD (no PS7 version as of now), then it won't run on PS7 – you might mention that in documentation or automatically fall back to using the MS Graph API via REST as an alternative. Likewise, older Exchange, SharePoint modules may not run on Core. The **trade-off** for compatibility might be using platform-neutral REST APIs or PowerShell 7 compatible modules where possible. This is more work upfront but pays off in flexibility.
 
-**Anti-Patterns:** Writing scripts that unknowingly assume Windows – e.g. using backslashes in paths, or `ipconfig` command – and then finding they fail in a Linux PowerShell container. Always examine whether each external call or method is portable. Don't use `$PSScriptRoot` for something and assume path separator; use `Join-Path $PSScriptRoot 'subfolder'`. Another anti-pattern is ignoring encoding issues: if your script produces a file that will be consumed by Windows and Linux, ensure the encoding is acceptable in both (UTF-8 is a good universal choice). Avoid using features from a newer PS version without guarding for older ones if you claim to support them – e.g., using the `Ternary operator ?:` introduced in PS7 will cause syntax errors in PS5. If backward compatibility is needed, either refrain or handle via separate script versions.
+**Anti-Patterns:** 
+- Writing scripts that unknowingly assume Windows – e.g. using backslashes in paths, or `ipconfig` command – and then finding they fail in a Linux PowerShell container. 
+- Always examine whether each external call or method is portable. Don't use `$PSScriptRoot` for something and assume path separator; use `Join-Path $PSScriptRoot 'subfolder'`. 
+- Another anti-pattern is ignoring encoding issues: if your script produces a file that will be consumed by Windows and Linux, ensure the encoding is acceptable in both (UTF-8 is a good universal choice). 
+- Avoid using features from a newer PS version without guarding for older ones if you claim to support them – e.g., using the `Ternary operator ?:` introduced in PS7 will cause syntax errors in PS5. If backward compatibility is needed, either refrain or handle via separate script versions.
 
 ## Maintainability and Readability
 
