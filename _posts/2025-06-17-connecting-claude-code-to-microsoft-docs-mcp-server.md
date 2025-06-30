@@ -27,13 +27,11 @@ First, check what MCP commands Claude Code supports:
 claude mcp
 ```
 
-The command we need is `add-json`:
+The command we need is as follows:
 
 ```bash
-claude mcp add-json microsoft-docs-mcp '{"type":"http","url":"https://learn.microsoft.com/api/mcp"}'
+claude mcp add --transport http MicrosoftDocs https://learn.microsoft.com/api/mcp
 ```
-
-Note: Use hyphens or underscores in the server name - it doesn't seem to like it if you use dots.
 
 ## Verifying the Connection
 
@@ -43,7 +41,7 @@ After adding it, check that it's connected:
 claude mcp list
 ```
 
-You should see:
+You should see something like:
 - Status: ✔ connected
 - URL: https://learn.microsoft.com/api/mcp
 - Capabilities: tools
@@ -52,30 +50,18 @@ You should see:
 You can also inspect what tools are available:
 
 ```bash
-claude mcp get microsoft-docs-mcp
+claude mcp get MicrosoftDocs
 ```
 
 ## Using It in Practice
 
 Once connected, you can:
 
-- Just ask Claude Code questions about Microsoft tech - it'll automatically use the tool when relevant
+- Just ask Claude Code questions about Microsoft tech - it should automatically use the tool when relevant. You can always nudge it to use the Microsoft Docs MCP server.
 - Explicitly request searches: "Search Microsoft docs for Azure Container Apps"
-- Get authoritative, up-to-date info straight from the source
 
 The search is semantic, so natural language queries work perfectly. Results are optimised for AI consumption - you get clean, relevant chunks rather than entire documents.
 
-## Quick Reference
+## Connecting Claude Desktop to the Microsoft Docs MCP
 
-```bash
-# Add the server
-claude mcp add-json microsoft-docs-mcp '{"type":"http","url":"https://learn.microsoft.com/api/mcp"}'
-
-# Verify it's connected
-claude mcp list
-
-# Check the available tools
-claude mcp get microsoft-docs-mcp
-```
-
-The endpoint (`https://learn.microsoft.com/api/mcp`) is for programmatic access only - don't try to hit it in your browser.
+You can also add the Microsoft Docs MCP server in Claude Desktop by clicking on the `Connect Apps` button on that chat screen, and then choosing `Add integration`. Fill out a name of your choice, and add the URL `https://learn.microsoft.com/api/mcp`, it's that simple.
