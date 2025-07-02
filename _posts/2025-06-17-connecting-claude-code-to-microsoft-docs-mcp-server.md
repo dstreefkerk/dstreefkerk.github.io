@@ -27,7 +27,7 @@ First, check what MCP commands Claude Code supports:
 claude mcp
 ```
 
-The command we need is as follows:
+The command we need to enter is as follows:
 
 ```bash
 claude mcp add --transport http MicrosoftDocs https://learn.microsoft.com/api/mcp
