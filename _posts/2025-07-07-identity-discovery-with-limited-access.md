@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Identity Discovery KQL Queries for Consultants Without Entra ID Access"
+title: "Useful Identity Discovery KQL Queries"
 date: 2025-07-07
 categories: [azure, sentinel, security]
 tags: [kql, microsoft-sentinel, identity, entra-id, log-analytics, consulting]
