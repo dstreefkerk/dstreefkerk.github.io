@@ -16,7 +16,9 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 ## Script Structure and Style
 
-* **Standard Script Layout:** Begin scripts with a clear header section. Include **comment-based help** (using `<# ... #>` at top) for Synopsis, Description, Parameter definitions, and Examples. This ensures maintainers and tools (like `Get-Help`) can understand usage and purpose. Follow with a `param()` block for inputs, then your code. A typical structure is: **Help → Param → Variable initialisation → Functions → Main code → Cleanup**. Using this consistent layout makes scripts easier to navigate and maintain (Critical).
+* **Standard Script Layout:** Begin scripts with a clear header section. Include **comment-based help** (using `<# ... #>` at top) for Synopsis, Description, Parameter definitions, and Examples. This ensures maintainers and tools (like `Get-Help`) can understand usage and purpose. Follow with a `param()` block for inputs, then your code. A typical structure is: **Help → Param → Functions → Main code → Cleanup**. Using this consistent layout makes scripts easier to navigate and maintain (Critical).
+
+* **Script vs Function Structure:** Understand the difference between **script files** (.ps1) and **advanced functions**. Script files execute linearly and cannot use `begin/process/end` blocks at the top level - these blocks only work inside functions that support pipeline input. For script files, structure your code linearly after the param block. For advanced functions (used in modules or defined within scripts), you can use `begin/process/end` blocks to handle pipeline input effectively. **Script file structure:** `#Requires → Help → param() → Functions → Linear execution`. **Advanced function structure:** `function Name { [CmdletBinding()] param() → begin{} → process{} → end{} }`. Mixing these patterns causes parsing errors (Critical).
 
 * **Use `#Requires` and Strict Mode:** Include `#Requires` statements at the top to enforce prerequisites (PowerShell version, required modules, or run as admin) so that the script fails fast if the environment is not suitable. For example, `#Requires -Version 7.0` or `#Requires -Modules ActiveDirectory`. This prevents runtime errors on unsupported systems. Enable strict mode with `Set-StrictMode -Version Latest` at the start of execution (Critical). Strict Mode forces good practices by making undefined variables or out-of-scope references throw errors, similar to "Option Explicit". This helps catch bugs early by disallowing undeclared variables and other unsafe coding practices.
 
@@ -233,14 +235,25 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **Splitting Code into Functions:** Even within a single script file, it's often beneficial to define helper functions for repetitive tasks or logically separate operations. For example, if your script does A, B, C in sequence, consider making `function Do-A { ... }`, `function Do-B { ... }`, etc., and then in the main body call those functions. This avoids long, deeply nested script code and improves readability by giving descriptive names to sections of logic. It also naturally makes your code testable (each function can be tested individually) and potentially reusable. Just ensure those helper functions are defined before they are used (in script files, define all functions at top or in a dedicated region). This approach is endorsed by the idea of writing "toolmaking" style functions even if they are only used in this script – it's cleaner and if needed, easy to export to a module later (Recommended).
 
+* **String Formatting and Interpolation:** Use PowerShell's native string formatting capabilities properly to avoid parsing errors and improve readability (Critical). **Preferred approaches:**
+  - **Subexpression syntax:** `"Processing $($user.Name) at $(Get-Date)"` for complex expressions
+  - **Format operator:** `"Found {0} items in {1} seconds" -f $count, $elapsed` for structured formatting
+  - **Simple variable expansion:** `"Hello $Name"` for basic variable insertion
+  
+  **Avoid string concatenation** with the `+` operator in PowerShell as it's not idiomatic and can be error-prone: `$message = "User " + $name + " processed"` should be `$message = "User $name processed"`. Be particularly careful with string interpolation in verbose messages - expressions like `"Response time ($($stopwatch.ElapsedMilliseconds)ms)"` can cause parsing issues because PowerShell may interpret the closing `)ms` as a method call. Use spaces or format operators instead: `"Response time ($($stopwatch.ElapsedMilliseconds) ms)"` or `"Response time ({0}ms)" -f $stopwatch.ElapsedMilliseconds`. The format operator is especially useful when the same template is reused multiple times or when precision is needed (like formatting numbers or dates).
+
 * **Transcripts and Debugging Aids:** In a production scenario, you might not run with `-Verbose` normally. But having a **transcript** (Start-Transcript) can capture what happened if things go wrong. For maintainability, you could build in a debug mode to your script (e.g., a `-DebugMode` switch that maybe sets `$DebugPreference='Continue'` to break on Write-Debug, or triggers more detailed logging). This way, when a user reports "the script didn't work", you can ask them to run in debug/verbose mode or send the transcript. It's much easier to troubleshoot with that information. Additionally, ensure your script returns proper exit codes if used in scheduled tasks or CI pipelines (e.g., if a critical error happens, you might end with `exit 1` so the calling system knows it failed). Without this, a failed script might still appear successful to automation orchestrators.
 
 **Anti-Patterns:** 
 - Massive scripts with no modularisation, no comments, and cryptic variable names – they become "write-only" (only the author can understand them, and even that for a short time). 
 - Not documenting parameters and expected input/output makes a script much less useful for others. 
+- **Using string concatenation with `+` operator** instead of PowerShell's native string interpolation – this is not idiomatic and can be error-prone.
+- **String interpolation parsing errors** from expressions like `"Time: ($($var)ms)"` where PowerShell misinterprets the closing parenthesis – always use spaces or format operators.
+- **Using begin/process/end blocks in script files** instead of functions – these blocks only work inside functions, not at the script file top level.
 - Letting stylistic inconsistencies creep in (like half the file using 4 spaces, another part using 2 or tabs, random capitalisation) – it signals lack of attention to detail, and in worst cases can even cause errors (e.g. misaligned backticks or indentation might hide a continuation).
 - Another anti-pattern is leaving old or dead code commented out in the script indefinitely – use source control for history, and remove unused code to avoid confusion. 
 - Also, avoid writing interactive prompts (`Read-Host`) for things like passwords or confirmations in scripts that are meant for automation – these block non-interactive use; instead use parameters and `ShouldProcess` for confirmations. 
+- **Saving files with UTF-8 BOM** which can cause parsing errors in PowerShell – always save as UTF-8 without BOM.
 - Lastly, ignoring PSScriptAnalyzer warnings without good reason can lead to technical debt – if a rule isn't applicable, consider disabling that rule via comment for that instance (with explanation) or in your settings, but don't just ignore all output of analysis.
 
 ## Output and Interoperability
@@ -336,10 +349,11 @@ Below is a concise checklist of key best practices, categorised by priority:
 
 **Structure & Style:**
 
-* **Template:** Always start with `#requires` (version, modules) and `<# .SYNOPSIS/.DESCRIPTION #>` help. Then `param(...)` with `[CmdletBinding()]`. Use `Begin/Process/End` blocks for pipeline functions. Keep functions short and focused.
+* **Template:** Always start with `#requires` (version, modules) and `<# .SYNOPSIS/.DESCRIPTION #>` help. Then `param(...)` with `[CmdletBinding()]`. **Script files:** Use linear execution after param block. **Functions:** Use `Begin/Process/End` blocks for pipeline functions. Keep functions short and focused.
+* **String Formatting:** Use `"Variable is $var"` for simple cases. Use `"Complex: $($obj.Property)"` for expressions. Use `"Template {0} with {1}" -f $val1, $val2` for structured formatting. **Avoid** `+` concatenation and parsing-error patterns like `"($($var)ms)"`.
 * **Consistency:** Use 4 spaces for indent. Use PascalCase for Names (Cmdlets, Params), lowercase for keywords (`if`, `foreach`), UPPERCASE for help tags in comments. Consistent naming and layout across scripts.
 * **Strict Mode:** Enable strict mode (`Set-StrictMode -Version Latest`) to catch undefined vars and subtle bugs early.
-* **Source Control:** Keep scripts in a repo, track versions. Document changes in .NOTES or changelog. Name files clearly (Get-Report.ps1, not script1.ps1).
+* **Source Control:** Keep scripts in a repo, track versions. Document changes in .NOTES or changelog. Name files clearly (Get-Report.ps1, not script1.ps1). Save as UTF-8 without BOM.
 
 **Cmdlet Design:**
 
@@ -415,6 +429,94 @@ Below is a concise checklist of key best practices, categorised by priority:
 
 This cheat sheet can be used as a quick-reference for script development and code reviews, ensuring adherence to enterprise PowerShell standards.
 
+## ⚠️ Common Pitfalls and How to Avoid Them
+
+Based on real-world debugging experience, here are specific mistakes that cause script failures and how to prevent them:
+
+### String Formatting Pitfalls
+
+**Problem:** String interpolation parsing errors
+```powershell
+# ❌ WRONG - Causes "Unexpected token 'ms'" error
+Write-Verbose "Response time ($($stopwatch.ElapsedMilliseconds)ms)"
+
+# ✅ CORRECT - Add space or use format operator
+Write-Verbose "Response time ($($stopwatch.ElapsedMilliseconds) ms)"
+Write-Verbose ("Response time ({0}ms)" -f $stopwatch.ElapsedMilliseconds)
+```
+
+**Problem:** String concatenation in PowerShell
+```powershell
+# ❌ WRONG - Not idiomatic PowerShell
+$message = "User " + $name + " processed at " + $timestamp
+
+# ✅ CORRECT - Use string interpolation
+$message = "User $name processed at $timestamp"
+```
+
+### Script Structure Pitfalls
+
+**Problem:** Using begin/process/end blocks in script files
+```powershell
+# ❌ WRONG - Causes "The term 'begin' is not recognized" error
+param($Domain)
+
+begin {
+    # This fails in .ps1 files
+}
+
+# ✅ CORRECT - Linear execution in scripts
+param($Domain)
+
+# Initialisation code here
+Set-StrictMode -Version Latest
+
+# Main logic here
+foreach ($DomainName in $Domain) {
+    # Process each domain
+}
+```
+
+**Problem:** Incorrect array handling in rate limiting
+```powershell
+# ❌ WRONG - Can cause "Count property not found" error
+$script:RequestTimes = $script:RequestTimes | Where-Object { $_ -gt $cutoffTime }
+
+# ✅ CORRECT - Ensure result is always an array
+$script:RequestTimes = @($script:RequestTimes | Where-Object { $_ -gt $cutoffTime })
+```
+
+### File Encoding Pitfalls
+
+**Problem:** Byte Order Mark (BOM) issues
+```powershell
+# ❌ WRONG - Files saved with UTF-8 BOM can cause parsing errors
+# The BOM character at start of file: ﻿#Requires -Version 5.1
+
+# ✅ CORRECT - Save files as UTF-8 without BOM
+#Requires -Version 5.1
+```
+
+### Error Handling Pitfalls
+
+**Problem:** Not capturing error details immediately
+```powershell
+# ❌ WRONG - Error details may be lost
+catch {
+    Write-Log "Some other operation"  # This might change $_
+    Write-Error "Failed: $($_.Exception.Message)"  # May be wrong error
+}
+
+# ✅ CORRECT - Capture error immediately
+catch {
+    $currentError = $_  # Capture immediately
+    Write-Log "Some other operation"
+    Write-Error "Failed: $($currentError.Exception.Message)"
+}
+```
+
+These examples represent actual failures encountered during script development and demonstrate the importance of following PowerShell best practices consistently.
+
 ## 🧪 Example: Script Template with Best Practices
 
 Below is a simplified PowerShell script template incorporating many best practices discussed. It demonstrates structure, parameter validation, error handling, logging, and secure patterns:
@@ -454,69 +556,106 @@ param(
     [System.Management.Automation.PSCredential]$Credential
 )
 
-begin {
-    # Enable strict mode and transcript for safety and logging
-    Set-StrictMode -Version Latest
-    if ($PSBoundParameters.ContainsKey('Verbose')) {
-        Start-Transcript -Path ("./Logs/UserTool_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date)) -Append | Out-Null
-    }
-
-    Write-Verbose "Starting script at $(Get-Date) for user: $UserName, Action: $Action"
-    # If credential not provided, use current user context
-    if (-not $Credential) {
-        Write-Verbose "No credential provided, using current user context."
-    }
+#region Helper Functions (if needed)
+function Write-ActionLog {
+    param($Message, $UserName, $Action)
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    Write-Verbose "$timestamp - $Action action: $Message (User: $UserName)"
 }
-process {
+#endregion
+
+# Script initialisation
+Set-StrictMode -Version Latest
+
+# Start transcript for logging if verbose is enabled
+if ($PSBoundParameters.ContainsKey('Verbose')) {
+    $logPath = "./Logs/UserTool_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date)
+    Start-Transcript -Path $logPath -Append | Out-Null
+    Write-Verbose "Transcript started: $logPath"
+}
+
+Write-Verbose "Starting script at $(Get-Date) for user: $UserName, Action: $Action"
+
+# Main script logic
+try {
     # Construct a message for ShouldProcess
     $target = "user account '$UserName'"
-    $what   = ($Action -eq 'Disable') ? 'Disable Account' : 'Enable Account'
+    $what = if ($Action -eq 'Disable') { 'Disable Account' } else { 'Enable Account' }
 
     if ($PSCmdlet.ShouldProcess($target, $what)) {
-        try {
-            # Connect to AD (if needed, using Credential)
-            if ($Credential) {
-                Write-Verbose "Connecting to AD with provided credentials"
-                Import-Module ActiveDirectory -ErrorAction Stop
-                # Example using credential (for illustration; AD cmdlets can use -Credential)
-            }
-
-            Write-Verbose "$Action action in progress for $UserName"
-            if ($Action -eq 'Disable') {
-                Disable-ADAccount -Identity $UserName -ErrorAction Stop
-            } else {
-                Enable-ADAccount -Identity $UserName -ErrorAction Stop
-            }
-
-            Write-Verbose "$Action action completed for $UserName"
-            # Output an object with the result
-            $result = [PSCustomObject]@{
-                UserName = $UserName
-                Action   = $Action
-                Status   = 'Success'
-                Timestamp= Get-Date
-            }
-            Write-Output $result
-
-        } catch {
-            # Capture error and output a structured error record
-            $err = $_  # current error
-            Write-Error "Failed to $Action user $UserName. `nDetails: $($err.Exception.Message)"
-            # Optionally output a failure object or set a specific exit code
-            $result = [PSCustomObject]@{
-                UserName = $UserName
-                Action   = $Action
-                Status   = 'Failed'
-                Error    = $($err.Exception.Message)
-            }
-            Write-Output $result
+        # Connect to AD (if needed, using Credential)
+        if ($Credential) {
+            Write-Verbose "Connecting to AD with provided credentials"
+            Import-Module ActiveDirectory -ErrorAction Stop
         }
+
+        Write-ActionLog "Starting $Action operation" $UserName $Action
+        
+        if ($Action -eq 'Disable') {
+            $params = @{
+                Identity = $UserName
+                ErrorAction = 'Stop'
+            }
+            if ($Credential) { $params.Credential = $Credential }
+            Disable-ADAccount @params
+        } else {
+            $params = @{
+                Identity = $UserName
+                ErrorAction = 'Stop'
+            }
+            if ($Credential) { $params.Credential = $Credential }
+            Enable-ADAccount @params
+        }
+
+        Write-ActionLog "Successfully completed $Action operation" $UserName $Action
+        
+        # Output structured result object
+        $result = [PSCustomObject]@{
+            UserName = $UserName
+            Action   = $Action
+            Status   = 'Success'
+            Timestamp = Get-Date
+            Message  = "$Action operation completed successfully"
+        }
+        Write-Output $result
+
     } else {
         Write-Verbose "ShouldProcess declined action. No changes made to $UserName."
+        
+        # Output result for WhatIf scenarios
+        $result = [PSCustomObject]@{
+            UserName = $UserName
+            Action   = $Action
+            Status   = 'Skipped'
+            Timestamp = Get-Date
+            Message  = "Operation skipped (WhatIf or user declined confirmation)"
+        }
+        Write-Output $result
     }
 }
-end {
-    Write-Verbose "Script completed at $(Get-Date)."
+catch {
+    # Capture error details immediately
+    $errorDetails = $_
+    $errorMessage = "Failed to {0} user {1}: {2}" -f $Action, $UserName, $errorDetails.Exception.Message
+    
+    Write-Error $errorMessage
+    Write-ActionLog "Error occurred: $($errorDetails.Exception.Message)" $UserName $Action
+    
+    # Output failure object
+    $result = [PSCustomObject]@{
+        UserName = $UserName
+        Action   = $Action
+        Status   = 'Failed'
+        Timestamp = Get-Date
+        Error    = $errorDetails.Exception.Message
+        Message  = $errorMessage
+    }
+    Write-Output $result
+}
+finally {
+    # Cleanup - always runs regardless of success/failure
+    Write-Verbose "Script completed at $(Get-Date)"
+    
     if ($PSBoundParameters.ContainsKey('Verbose')) {
         Stop-Transcript | Out-Null
     }
@@ -529,11 +668,15 @@ end {
 * Comment-based help provides Synopsis, Description, Parameters, Examples.
 * `[CmdletBinding()]` with `SupportsShouldProcess` enables `-WhatIf`/`-Confirm` usage.
 * Parameters have validation (`ValidateNotNullOrEmpty`, `ValidateSet`) and support secure credential input.
+* **Linear script structure** - no begin/process/end blocks at top level, which would cause parsing errors in .ps1 files.
+* Helper functions defined in a region for organisation and reusability.
 * `Set-StrictMode -Latest` is called for robust variable usage.
-* `Start-Transcript` is conditionally used when `-Verbose` is enabled to log the session (optional but useful for debugging/audit).
+* `Start-Transcript` is conditionally used when `-Verbose` is enabled to log the session.
+* **Proper string formatting** using the `-f` format operator to avoid interpolation issues.
 * Verbose messages (`Write-Verbose`) provide insight into script flow.
 * Uses `ShouldProcess` to confirm the action on the target, wrapping the core operation.
-* Try/Catch around the AD cmdlet call will catch exceptions (like user not found, or permission denied). On error, it writes a descriptive error and also outputs a result object indicating failure (this pattern allows the pipeline to continue with a status object, which might be useful for batch processing scenarios).
-* On success, outputs a PSCustomObject with details of the action, rather than just text, making it easy for further automation (e.g., collect results of disabling multiple accounts).
-* Confirms to not use `Write-Host` at all – all user-facing info is via Verbose or Error streams, which can be controlled by the user.
-* Illustrates cleanup in the `end` block (stopping transcript, final verbose message).
+* **Parameter splatting** (`@params`) for cleaner cmdlet calls with conditional parameters.
+* Try/Catch/Finally pattern with immediate error capture and proper cleanup.
+* On both success and failure, outputs structured PSCustomObject results for pipeline compatibility.
+* Avoids `Write-Host` entirely – all user-facing info is via appropriate streams (Verbose, Error).
+* **Finally block** ensures cleanup always occurs, even if errors happen (stopping transcript).
