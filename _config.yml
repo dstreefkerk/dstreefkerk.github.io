@@ -34,6 +34,10 @@ theme: minima
 plugins:
   - jekyll-feed
 
+# Jekyll Feed plugin settings
+feed:
+  excerpt_only: true
+
 # Pagination settings
 paginate: 10
 paginate_path: "/page/:num/"
