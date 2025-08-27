@@ -12,7 +12,27 @@ This guide outlines essential PowerShell scripting best practices for enterprise
 
 The practices are organised by topic area and prioritised into Critical, Recommended, and Good to Have categories. Each section includes both patterns to follow and anti-patterns to avoid, helping you write PowerShell that meets enterprise standards.
 
-Feed this to your LLM of choice, to ensure that it generates quality code.
+Feed this to your LLM of choice, to ensure that it generates quality code. I've also created a custom GPT that follows these best practices here: https://chatgpt.com/g/g-68a4fc60f76481918cb3e432a20ae383-powershell-mentor
+
+## PowerShell Version Considerations
+
+Before diving into best practices, it's important to understand which version of PowerShell you're targeting, as some behaviours and features differ significantly:
+
+### Version-Specific Differences
+
+| Feature/Practice             | Windows PowerShell 5.1      | PowerShell 7+                                        |
+| ---------------------------- | --------------------------- | ---------------------------------------------------- |
+| **Set-StrictMode**           | Version 3.0 is latest       | Version Latest (includes 3.0)                        |
+| **Default Encoding**         | UTF-16LE for Out-File       | UTF-8 without BOM                                    |
+| **Error Handling**           | Limited native exe handling | Better with $PSNativeCommandUseErrorActionPreference |
+| **Performance**              | Array operations slower     | Improved array performance                           |
+| **ForEach-Object -Parallel** | Not available               | Available for parallel processing                    |
+| **Null Coalescing**          | Not available               | ?? operator available                                |
+| **Cross-Platform**           | Windows only                | Windows, Linux, macOS                                |
+| **CIM Cmdlets**              | DCOM/WinRM                  | WinRM preferred, DCOM optional                       |
+| **Write-Host**               | Console only                | Writes to Information stream                         |
+
+**Recommendation:** When possible, target PowerShell 7+ for new scripts due to better performance, cross-platform support, and improved features. Maintain separate scripts or use conditional logic for environments requiring Windows PowerShell 5.1 compatibility.
 
 ## Script Structure and Style
 
@@ -22,15 +42,28 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **Use `#Requires` and Strict Mode:** Include `#Requires` statements at the top to enforce prerequisites (PowerShell version, required modules, or run as admin) so that the script fails fast if the environment is not suitable. For example, `#Requires -Version 7.0` or `#Requires -Modules ActiveDirectory`. This prevents runtime errors on unsupported systems. Enable strict mode with `Set-StrictMode -Version Latest` at the start of execution (Critical). Strict Mode forces good practices by making undefined variables or out-of-scope references throw errors, similar to "Option Explicit". This helps catch bugs early by disallowing undeclared variables and other unsafe coding practices.
 
-* **Regions and Layout:** Use **#region**/**#endregion** in your script or module to group related code blocks (e.g. parameters, variable setup, function definitions, main logic). This has no effect at runtime but improves readability in editors. Maintain consistent **indentation and whitespace** style across the team. For example, prefer 4 spaces per indent level and avoid trailing spaces. Consistent formatting makes code review and collaboration easier (Recommended). Keep line lengths reasonable (e.g. <120 chars) and use line breaks to avoid horizontal scrolling.
+* **Naming Conventions - Pascal Case and camelCase:** PowerShell follows specific casing conventions aligned with .NET standards. Use **Pascal Case** for functions, cmdlets, parameters, classes, properties, and methods (e.g., `Get-UserReport`, `$UserName`). Use **camelCase** for private variables within functions and local variables (e.g., `$reportData`, `$currentDate`). This consistency aids readability and aligns with PowerShell conventions that tools like IntelliSense expect (Critical).
+
+* **Line Length and Indentation Standards:** Keep line lengths under **115-120 characters** for readability. Use **4 spaces per indent level** (not tabs) consistently. When breaking long pipelines, place the pipe `|` at the start of the continuation line for clarity. These standards prevent horizontal scrolling and maintain code consistency across teams (Recommended).
+  
+  ```powershell
+  # GOOD - Proper line breaking at natural points
+  $results = Get-ADUser -Filter "Enabled -eq $true" |
+      Where-Object { $_.LastLogonDate -lt (Get-Date).AddDays(-90) } |
+      Select-Object Name, SamAccountName, LastLogonDate
+  ```
+
+* **Regions and Layout:** Use **#region**/**#endregion** in your script or module to group related code blocks (e.g. parameters, variable setup, function definitions, main logic). This has no effect at runtime but improves readability in editors. Maintain consistent **indentation and whitespace** style across the team. Consistent formatting makes code review and collaboration easier (Recommended).
 
 * **Variable Initialisation and Scope:** Initialise variables explicitly rather than assuming defaults, and use proper scoping. Avoid using global scope unless absolutely necessary – prefer local (`$local:`), script (`$script:`), or function-private variables. This **scope hygiene** prevents unexpected side-effects between scripts or interactive sessions. For example, set `$ErrorActionPreference = 'Stop'` (with local scope) at start if you want all errors to be terminating by default. Clear or reset critical variables in cleanup sections to free resources or prepare for re-use (Good to Have).
 
-* **Source Control Integration:** Organise scripts in source control with logical naming and structure. Use **descriptive file names** (e.g. `Backup-UserHomeDirs.ps1` instead of `script1.ps1`) that reflect their purpose. Group related scripts into folders or PowerShell modules for easier versioning. Include metadata like version, author, last modified date either in a `.NOTES` section of comment-based help or in a module manifest. This helps track changes and ensure the right script versions are deployed (Good to Have).
+* **Source Control Integration:** Organise scripts in source control with logical naming and structure. Use **descriptive file names** (e.g. `Backup-UserHomeDirs.ps1` instead of `script1.ps1`) that reflect their purpose. Group related scripts into folders or PowerShell modules for easier versioning. Include metadata like version, author, last modified date either in a `.NOTES` section of comment-based help or in a module manifest. Save files as **UTF-8 without BOM** to prevent parsing errors. This helps track changes and ensure the right script versions are deployed (Good to Have).
 
 **Anti-Patterns to Avoid:** 
+
 - Writing one monolithic script without structure or help (hard to reuse or debug), using inconsistent naming/indentation (reduces readability), or relying on implicit behaviour (like uninitialised variables) instead of explicit `Set-StrictMode` and clear code (these can lead to subtle bugs). 
 - Also avoid leaving behind state (e.g. not cleaning up temporary files or credentials) – always include a cleanup step if needed.
+- Saving files with UTF-8 BOM which can cause parsing errors in PowerShell.
 
 ## Cmdlet and Function Design
 
@@ -42,60 +75,236 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **Output Objects, Not Text:** Functions should **output rich objects** (e.g. PSCustomObject or strongly-typed objects) rather than formatted strings or using `Write-Host` for results. This allows downstream automation to parse and reuse your output (through the pipeline or by converting to JSON, CSV, etc.). Use `Write-Output` (or simply output an object) to emit data. **Avoid** using `Write-Host` unless purely for interactive messages (Write-Host writes only to the console host, not the output stream). This is a common bad practice to avoid – in non-interactive scenarios, `Write-Host` output can't be captured or piped, making your script less useful in automation (Critical). Instead, use `Write-Verbose` or `Write-Information` for informational console messages that aren't part of data output.
 
+* **Use Native Cmdlets - Don't Reinvent the Wheel:** Always check for existing PowerShell functionality before writing custom code. PowerShell has extensive built-in capabilities that are often overlooked (Recommended). Common examples include:
+  
+  - **Path operations:** `Split-Path`, `Join-Path`, `Resolve-Path`, `Convert-Path`, `Test-Path`
+  - **Date handling:** `Get-Date` handles numerous formats including natural language like "yesterday" or "last monday"
+  - **String operations:** Built-in `-split` and `-join` operators, `Select-String` for grep-like functionality
+  - **Data operations:** `Group-Object` (SQL-like GROUP BY), `Sort-Object`, `Measure-Object` (statistics), `Compare-Object` (diff)
+  - **Type conversion:** `ConvertTo-Json`, `ConvertFrom-Json`, `ConvertTo-Csv`, `ConvertTo-SecureString`
+  
+  ```powershell
+  # BAD - Custom date parsing
+  function Parse-CustomDate {
+      param([string]$DateString)
+      # Complex regex parsing...
+  }
+  
+  # GOOD - Get-Date handles MANY formats automatically!
+  $date = Get-Date "10 January 2025"
+  $yesterday = Get-Date "yesterday"
+  $futureDate = (Get-Date).AddDays(30)
+  ```
+
 * **Designing Output Objects:** Ensure objects your script returns have a consistent structure (same properties for each item) and meaningful property names. Consider using custom classes or `[PSCustomObject]` with `Add-Member` / hashtables for complex data, so properties are easily accessible. For example, return an object with properties like `UserName`, `LastLogin`, `Status` instead of a raw string. You can declare `[OutputType()]` attribute to document output types for users and tooling (Good to Have). If you create custom object types, you can also provide a formatting file (`.format.ps1xml`) in modules to define default views, rather than formatting in the script.
 
 * **Parameter Splatting for Readability:** When calling cmdlets with many parameters or when passing along parameters, use **splatting** (i.e. store parameters in a hashtable and use `@params`) to keep code tidy. For example:
-
+  
   ```powershell
   $params = @{ Path = $FilePath; Recurse = $true; Filter = '*.log' }
   Get-ChildItem @params
   ```
-
+  
   This avoids very long command lines and makes maintenance easier (Recommended). It also simplifies forwarding parameters from one function to another.
+
+* **Replace Deprecated Cmdlets:** Several commonly-used cmdlets are deprecated and should be replaced with modern alternatives (Critical):
+  
+  - **Get-EventLog → Get-WinEvent:** The modern cmdlet uses Windows Event Log technology, is much faster, and supports structured filtering
+  - **Get-WmiObject → Get-CimInstance:** CIM uses WS-Management (HTTP/HTTPS) instead of DCOM, is more secure, faster, and cross-platform compatible
+  
+  ```powershell
+  # DEPRECATED
+  Get-EventLog -LogName System -Newest 100
+  Get-WmiObject -Class Win32_ComputerSystem
+  
+  # MODERN
+  Get-WinEvent -LogName System -MaxEvents 100
+  Get-CimInstance -ClassName Win32_ComputerSystem
+  ```
 
 * **Consistent Usage of Objects:** Wherever possible, follow common cmdlet patterns. For instance, if your function has to output different object types based on a parameter, consider splitting into separate functions or use parameter sets (with distinct OutputType) to keep output predictable. Also, avoid mixing multiple object types in one output stream, as that can confuse formatting and consumers. If truly necessary (e.g. an internal helper returns two related types), document it clearly or output them as a single combined object.
 
 **Anti-Patterns:** 
+
 - Avoid using unapproved verbs or abbreviations (e.g. "Do-Something" or "Get-ADInfo" where verb or noun is not clear) – it's confusing and may trigger warnings. 
 - Don't hardcode output to text with format commands or string concatenation – this reduces reusability. 
 - Never use `Write-Host` to produce output data (only for user prompts or progress). 
 - Not implementing `-WhatIf` on a destructive function is a missed safeguard; it's better to include it (the PSScriptAnalyzer rule **UseShouldProcessForStateChangingFunctions** flags this). 
 - Also, avoid making functions that both perform an action and also prompt for input within – separate the data retrieval from action so they can be automated without interactive prompts (e.g. provide parameters for all inputs).
+- Don't reinvent native functionality – always check if PowerShell already has a cmdlet for your need.
 
 ## Parameter Handling
 
-* **Use Advanced Parameter Attributes:** Define parameters with proper attributes for validation and clarity. Key examples: **`[ValidateNotNullOrEmpty]`** to ensure a required string isn't empty, **`[ValidateSet('A','B',...)]`** to restrict input to allowed values, **`[ValidateRange(min,max)]`** for numeric bounds, and **`[ValidateScript({ ... })]`** for custom logic. Using these attributes shifts validation to PowerShell (it throws errors before running your code if inputs are invalid), which is more robust than manual checks (Critical). For instance, instead of coding `if($value -notin @('A','B')){ throw "Invalid" }`, just do `[ValidateSet('A','B')]` on the parameter – it's clearer and less error-prone.
+* **Use Advanced Parameter Attributes:** Define parameters with proper attributes for validation and clarity. Key examples: **`[ValidateNotNullOrEmpty]`** to ensure a required string isn't empty, **`[ValidateSet('A','B',...)]`** to restrict input to allowed values (use `IgnoreCase = $true` for user-friendliness), **`[ValidateRange(min,max)]`** for numeric bounds, and **`[ValidateScript({ ... })]`** for custom logic. Using these attributes shifts validation to PowerShell (it throws errors before running your code if inputs are invalid), which is more robust than manual checks (Critical). For instance, instead of coding `if($value -notin @('A','B')){ throw "Invalid" }`, just do `[ValidateSet('A','B', IgnoreCase = $true)]` on the parameter – it's clearer and less error-prone.
+
+* **Unsigned Integer Types for Counts:** For values that can't be negative (counts, retries, timeouts), use unsigned integer types like `[uint32]` or `[uint16]`. This self-documents that negative values are invalid and PowerShell automatically rejects them at parameter binding (Recommended).
+  
+  ```powershell
+  param(
+      [uint32]$MaxRetries = 3,
+      [uint32]$TimeoutSeconds = 30
+  )
+  ```
 
 * **Mandatory and Default Values:** Mark important parameters as **Mandatory** in the param block `[Parameter(Mandatory=$true)]` rather than prompting inside the script. PowerShell will handle prompting for missing mandatory params when the script is run interactively, and it makes it obvious to others which inputs are required. Provide sensible default values for optional parameters when appropriate (but avoid defaulting to something that could be dangerous – e.g. a `-Path` defaulting to `C:\` might be risky). Use **Parameter sets** when you have multiple exclusive sets of parameters. Each parameter set should have a unique combination of mandatory params, and use `DefaultParameterSetName` in `[CmdletBinding()]` to specify which set to use if PowerShell can't tell from arguments. This improves UX and prevents mutually exclusive parameters from being used together.
 
-* **Secure Credentials and Secrets:** For any secret or credential input, avoid plain strings. Use the `[PSCredential]` type for accounts (so the user can pass output of `Get-Credential`), or `[SecureString]` if only a password is needed. This ensures passwords are handled securely in memory and not exposed in command history or logs. **Never** hard-code credentials or accept raw passwords via parameters named "Password" (PSScriptAnalyzer flags this as a risk). In PowerShell 7+, consider using SecretManagement module/vaults for retrieval of secrets by name, rather than passing sensitive data in plain text (Recommended). For example, use a param like `[string]$ApiKeySecretName` and retrieve the actual secret with `Get-Secret` inside the script, or allow a `PSCredential` for authentication.
+* **Switch Parameters:** Switch parameters are `$false` by default – **never add `= $false`** as it's redundant and considered an anti-pattern. Just declare as `[switch]$ParameterName` (Critical).
+  
+  ```powershell
+  # CORRECT
+  param(
+      [switch]$Force,
+      [switch]$Verbose
+  )
+  
+  # INCORRECT - Don't do this!
+  param(
+      [switch]$Force = $false  # Redundant and anti-pattern
+  )
+  ```
+
+* **Secure Credentials and Secrets:** For any secret or credential input, avoid plain strings. Use the proper credential parameter pattern (Critical):
+  
+  ```powershell
+  # For MANDATORY credentials
+  param(
+      [Parameter(Mandatory = $true)]
+      [System.Management.Automation.PSCredential]
+      $Credential
+  )
+  
+  # For OPTIONAL credentials with username string support
+  param(
+      [Parameter(Mandatory = $false)]
+      [System.Management.Automation.PSCredential]
+      [System.Management.Automation.Credential()]
+      $Credential = [System.Management.Automation.PSCredential]::Empty
+  )
+  ```
+  
+  The `[Credential()]` attribute enables passing a username string (like "domain\user"), which triggers a password prompt. Use `[PSCredential]::Empty` for optional credentials to distinguish from `$null`. **Never** hard-code credentials or accept raw passwords via parameters. In PowerShell 7+, consider using SecretManagement module/vaults for retrieval of secrets by name, rather than passing sensitive data in plain text (Recommended).
 
 * **Dynamic Parameters (Use Caution):** Dynamic parameters (defined in a `DynamicParam` block) can adapt to context, but they add complexity and can confuse users (as they don't show in standard help until runtime). Use them sparingly and only for advanced scenarios (Good to Have). If used, ensure you also provide proper help metadata. In many cases, it's clearer to just validate within the script or use simpler approaches. **Trade-off:** While dynamic parameters can provide context-sensitive choices (e.g. available Azure regions dynamically), they make testing and maintenance harder. Many community scripts avoid them, whereas some Microsoft modules use them heavily – weigh necessity versus complexity.
 
-* **Help Messages and Aliases:** Use the `HelpMessage` attribute to provide a brief tip for parameters (this appears when PowerShell prompts for mandatory param in CLI). For example: `[Parameter(Mandatory)][string]$UserName = $(throw "Username is required")` or using `HelpMessage` to hint acceptable input. You can also define **aliases** for parameters using the `[Alias('ShortName')]` attribute to accept alternate names, especially if integrating with existing scripts or to offer a shorter name. But avoid overusing aliases – the primary name should be clear and preferred in documentation.
+* **Help Messages and Aliases:** Use the `HelpMessage` attribute to provide a brief tip for parameters (this appears when PowerShell prompts for mandatory param in CLI). For example: `[Parameter(Mandatory, HelpMessage="Enter the username to process")]`. You can also define **aliases** for parameters using the `[Alias('ShortName')]` attribute to accept alternate names, especially if integrating with existing scripts or to offer a shorter name. But avoid overusing aliases – the primary name should be clear and preferred in documentation.
 
 * **Parameter Sets for Clarity:** Use parameter sets to make the script interface intuitive. For example, a script might have `-FilePath` and `-Directory` as two ways to specify input; you can separate these into two parameter sets so only one is required at a time. Always set a `DefaultParameterSetName` in CmdletBinding when using sets to avoid ambiguity. This prevents confusion and runtime errors about parameter combinations (Recommended).
 
 * **Treat Parameters as Read-Only:** Once inside the script, avoid reusing parameter variable names for other purposes and do not modify them. If you need to transform input, assign to a new local variable. This protects the original input and makes the code easier to follow. For example, if you have `$Path` parameter, don't later assign `$Path = Join-Path $Path 'subdir'`; instead use a new variable `$ResolvedPath`. This is more of a coding style, but helps maintain clarity (Good to Have).
 
-**Anti-Patterns:** Avoid manual prompting like `Read-Host` to get input mid-script – instead design all needed input as parameters so the script can run unattended (except perhaps in very interactive scripts). Do not accept insecure input types for sensitive data (e.g. `[string]$Password`) – always prefer secure types. Do not leave parameters undocumented (every parameter in a public script should have a `.PARAMETER` description in comment-based help). Also, **do not ignore parameter validation** – catching bad input early saves a lot of trouble (e.g., letting a function proceed with a `$null` parameter that later causes a cryptic error is poor practice when ValidateNotNull could have caught it).
+**Anti-Patterns:** Avoid manual prompting like `Read-Host` to get input mid-script – instead design all needed input as parameters so the script can run unattended (except perhaps in very interactive scripts). Do not accept insecure input types for sensitive data (e.g. `[string]$Password`) – always prefer secure types. Do not leave parameters undocumented (every parameter in a public script should have a `.PARAMETER` description in comment-based help). Also, **do not ignore parameter validation** – catching bad input early saves a lot of trouble (e.g., letting a function proceed with a `$null` parameter that later causes a cryptic error is poor practice when ValidateNotNull could have caught it). Never use `= $false` on switch parameters.
 
 ## Error Handling and Resilience
 
-* **Use Try/Catch/Finally for Robustness:** Enclose risky operations in `try { ... } catch { ... }` blocks to gracefully handle exceptions (Critical). A **try/catch** ensures that if something fails (e.g. an AD lookup, file operation), you can log the error or take corrective action instead of the script crashing. Use `finally { ... }` for any cleanup that must run regardless of success or error (e.g. closing a file handle, reverting settings). This pattern is essential for long-running automation where transient errors are expected. For example:
-
+* **Use Try/Catch/Finally for Robustness:** Enclose risky operations in `try { ... } catch { ... }` blocks to gracefully handle exceptions (Critical). A **try/catch** ensures that if something fails (e.g. an AD lookup, file operation), you can log the error or take corrective action instead of the script crashing. Use `finally { ... }` for any cleanup that must run regardless of success or error (e.g. closing a file handle, reverting settings). This pattern is essential for long-running automation where transient errors are expected.
+  
+  **Understanding Terminating vs Non-Terminating Errors:**
+  
+  PowerShell has two types of errors, and this distinction is CRITICAL for proper error handling:
+  
+  **Non-Terminating Errors** (default for most cmdlets):
+  
+  - Continue execution after the error
+  - Do NOT trigger catch blocks by default
+  - Written to error stream but script continues
+  - Examples: File not found in Get-ChildItem, user not found in Get-ADUser
+  
+  **Terminating Errors**:
+  
+  - Stop execution immediately
+  - DO trigger catch blocks
+  - Examples: Syntax errors, throw statements, critical failures
+  
   ```powershell
+  # ❌ WRONG - Catch block won't trigger for non-terminating errors
   try {
-      Invoke-RESTMethod -Uri $api -ErrorAction Stop 
+      Get-ADUser -Identity "NonExistentUser"  # Non-terminating error
+      Write-Host "This line WILL execute"
   } catch {
-      Write-Error "API call failed: $_"
-      return  # or handle accordingly
+      Write-Host "This catch block WON'T execute!"  # Never reached
+  }
+  
+  # ✅ CORRECT - Force terminating error with -ErrorAction Stop
+  try {
+      Get-ADUser -Identity "NonExistentUser" -ErrorAction Stop
+      Write-Host "This line WON'T execute"
+  } catch {
+      Write-Host "This catch block WILL execute!"  # Properly caught
+  }
+  
+  # ✅ ALTERNATIVE - Set preference for entire script/scope
+  $ErrorActionPreference = 'Stop'  # Makes ALL errors terminating
+  try {
+      Get-ADUser -Identity "NonExistentUser"  # Now terminating
+      Get-ChildItem -Path "C:\NonExistent"     # Also terminating
+  } catch {
+      Write-Error "Operation failed: $_"
   } finally {
-      Stop-Transcript
+      $ErrorActionPreference = 'Continue'  # Reset if needed
+  }
+  
+  # Complete example with proper error handling
+  $connection = $null
+  try {
+      # Force terminating errors for cmdlets
+      $connection = New-Object System.Data.SqlClient.SqlConnection -ErrorAction Stop
+      $connection.ConnectionString = $connectionString
+      $connection.Open()
+  
+      # .NET methods throw terminating errors by default
+      $command = $connection.CreateCommand()
+      $command.CommandText = "SELECT * FROM Users"
+      $result = $command.ExecuteReader()
+  
+  } catch [System.Data.SqlClient.SqlException] {
+      # Specific exception handling
+      Write-Error "Database error: $($_.Exception.Message)"
+      Write-Verbose "SQL Error Code: $($_.Exception.Number)" -Verbose
+  } catch {
+      # Generic exception handling
+      Write-Error "Unexpected error: $_"
+      Write-Verbose $_.ScriptStackTrace -Verbose
+      throw  # Re-throw if needed
+  } finally {
+      # This ALWAYS executes, even with exceptions, CTRL+C, Exit, or Return
+      if ($connection -and $connection.State -eq 'Open') {
+          Write-Verbose "Closing database connection" -Verbose
+          $connection.Close()
+          $connection.Dispose()
+      }
   }
   ```
+  
+  **Key Points:**
+  
+  - Always include `-ErrorAction Stop` when calling cmdlets inside try blocks
+  - Consider setting `$ErrorActionPreference = 'Stop'` for critical scripts
+  - .NET method calls throw terminating errors by default
+  - Use specific catch blocks for different exception types when needed
+  - Always clean up resources in finally blocks
 
-  Always include `-ErrorAction Stop` when calling cmdlets inside try blocks to convert non-terminating errors into terminating exceptions that can be caught. This is important because many cmdlets by default only emit non-terminating errors (warnings) which would skip the catch.
+* **Finally Block Best Practices:** The `finally` block guarantees cleanup code ALWAYS executes, even during errors or script termination. Common use cases include (Critical):
+  
+  - Database connection cleanup
+  - File handle disposal
+  - Transcript stopping
+  - Credential disposal
+  - Temporary file removal
+  - Resource deallocation
+  
+  ```powershell
+  # File handling example
+  $file = $null
+  try {
+      $file = [System.IO.File]::OpenWrite("output.txt")
+      # Write to file
+  } finally {
+      if ($file) { 
+          $file.Close()
+          $file.Dispose()
+      }
+  }
+  ```
 
 * **Distinguish Error Types:** Recognise the difference between **terminating** and **non-terminating** errors. Non-terminating errors (the default for many cmdlets) do **not** stop the script nor trigger catch blocks. That's why setting `-ErrorAction Stop` is needed to treat them as terminating (Recommended). Within catch, you can use multiple `catch [ExceptionType] { ... }` to handle specific exceptions differently (e.g., catch `System.Net.WebException` vs other exceptions). This allows resilience strategies: you might retry on a network timeout exception but not on a parameter binding exception.
 
@@ -104,7 +313,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Use Write-Error for Non-Terminating Issues:** If an error is not fatal to the entire script's operation, you can use `Write-Error` to record it without throwing. `Write-Error` writes to the error stream but doesn't stop execution (unless `$ErrorActionPreference` is Stop). For example, in a loop processing 100 files, if one file is locked, you might do `Write-Error "Could not access $file"` and continue to the next. This logs the issue but continues the pipeline (Good to Have). Make sure to include enough context in the error message. However, avoid blindly continuing after errors unless it's truly non-critical – in many cases, if one step fails, subsequent steps might not make sense.
 
 * **Implement Retry Logic for Transient Failures:** In enterprise scenarios (especially cloud or network operations), temporary glitches happen (e.g., network timeouts, API rate limits). Plan for this by implementing **retry with backoff**. For example, if an API call fails with a 429 (too many requests) or a network error, you might catch it and retry after a delay (increasing the delay each attempt). This can be a loop in the catch:
-
+  
   ```powershell
   for($i=1; $i -le 3; $i++) {
       try {
@@ -116,7 +325,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
       }
   }
   ```
-
+  
   This pattern improves resilience (Recommended). Use judiciously – don't retry on permanent errors like "access denied." Distinguish **transient** vs. **permanent** errors either by error type or message. Logging warnings for retries is helpful for later analysis.
 
 * **Avoid Silencing or Ignoring Errors:** It's an anti-pattern to use `try {} catch {}` with an empty catch or merely `$null` – this hides exceptions and makes troubleshooting impossible. At minimum, log something in the catch (`Write-Error` or `Write-Warning`) so the failure isn't silent. Similarly, avoid using `$ErrorActionPreference = 'SilentlyContinue'` (or `-ErrorAction SilentlyContinue`) unless you absolutely know what you're doing – suppressed errors can lead to incorrect script results. A better approach is to catch and handle or explicitly decide to ignore specific, known non-critical errors with a comment explaining why.
@@ -126,20 +335,126 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Use Flags/Return Codes Judiciously:** Rather than setting flags like `$success = $false` in catch and checking after, prefer structuring logic so that you do all necessary steps in the `try` and handle failures in one place (the catch). The **ERR-03** guideline suggests avoiding "flag variables" for error handling, and instead wrapping the entire transactional sequence in one try/catch. This makes code more linear and clear. For example, do not do: `try { $ok=$true; Step1 -EA Stop } catch { $ok=$false } if($ok){ Step2; Step3 }`. Instead, do `try { Step1; Step2; Step3; } catch { ... handle ... }`.
 
 **Anti-Patterns:** 
+
 - Relying on `$?` to detect errors – `$?` only tells if the last command considered itself successful, which might be misleading and it carries no error details. It's better to use try/catch or check `$Error[0]`. 
 - Avoid catching generic `Exception` and then doing nothing or just writing a general message – you lose the specific error context. 
 - Never ignore errors by piping to `Out-Null` or `>$null` without justification; if a command's output is not needed, that's fine, but if you're doing it just to avoid an error, handle the error instead. 
 - Finally, don't overuse `Write-Host` for error reporting – use `Write-Error` or `throw` so that errors are properly captured in logs/streams and can be handled by callers.
 
+## Performance Optimisation
+
+* **Filter at Source, Not Pipeline:** Filtering at the source is orders of magnitude more efficient than pipeline filtering (Critical). This applies to database queries, Active Directory searches, event logs, and any service that supports server-side filtering:
+  
+  ```powershell
+  # GOOD - Server-side filtering (FAST)
+  Get-WinEvent -FilterHashtable @{
+      LogName = "System"
+      Level = 2,3  # Warning and Error
+      StartTime = (Get-Date).AddDays(-7)
+  }
+  
+  # BAD - Client-side filtering (SLOW - retrieves ALL events first!)
+  Get-WinEvent -LogName System | 
+      Where-Object { $_.Level -eq 2 -or $_.Level -eq 3 }
+  ```
+  
+  **Performance Impact:** Source filtering reduces network traffic, memory usage, and processing time. Can reduce query time from minutes to seconds with large datasets.
+
+* **foreach Statement vs ForEach-Object Cmdlet:** Understanding when to use each looping construct is critical for performance (Recommended):
+  
+  ```powershell
+  # foreach statement - FAST but loads all into memory
+  $servers = Get-Content servers.txt
+  foreach ($server in $servers) {
+      Test-Connection $server -Count 1
+  }
+  
+  # ForEach-Object cmdlet - MEMORY EFFICIENT for streaming
+  Get-Content massive-log.txt | ForEach-Object {
+      if ($_ -match 'ERROR') { $_ }
+  }
+  ```
+  
+  **Decision Factors:**
+  
+  - **Small collections (<1000 items):** Performance difference negligible
+  - **Large collections (>10000 items):** foreach statement significantly faster if memory allows
+  - **Unknown/streaming data:** ForEach-Object for memory efficiency
+  - **Pipeline integration needed:** ForEach-Object for composability
+
+* **Array Building Best Practices:** Avoid using `+=` for array concatenation in loops as it creates a new array each time (Critical for large datasets):
+  
+  ```powershell
+  # BAD - O(n²) performance with +=
+  $results = @()
+  foreach ($item in $collection) {
+      $results += Process-Item $item  # Creates new array each time!
+  }
+  
+  # GOOD - Use .NET collections for efficiency
+  $results = [System.Collections.Generic.List[PSObject]]::new()
+  foreach ($item in $collection) {
+      $results.Add((Process-Item $item))
+  }
+  
+  # GOOD - Capture foreach output directly (simple and efficient)
+  $results = foreach ($item in $collection) {
+      Process-Item $item  # Output is automatically collected
+  }
+  ```
+
 ## Security and Compliance
 
-* **Avoid Unsafe Code Practices:** **Never use** `Invoke-Expression` (or similar techniques) on untrusted or user-provided input. Constructing commands from strings can lead to injection vulnerabilities. For example, building a string `"Get-User $user"` and calling `Invoke-Expression` is dangerous if `$user` contains malicious content. Instead, use parameterised cmdlets or splatting. PSScriptAnalyzer explicitly flags `Invoke-Expression` usage as a warning. If you must execute dynamic code, ensure the content is fully under your control or whitelisted. Also avoid using `Add-Type` or `New-Object` with user input without validation, as they could be leveraged for malicious actions (Critical).
+* **Avoid Unsafe Code Practices - Invoke-Expression Alternatives:** **Never use** `Invoke-Expression` (or similar techniques) on untrusted or user-provided input. Constructing commands from strings can lead to injection vulnerabilities. PSScriptAnalyzer explicitly flags `Invoke-Expression` usage as a warning (Critical).
+  
+  **❌ DANGEROUS - Vulnerable to injection:**
+  
+  ```powershell
+  # User provides: "; Remove-Item C:\* -Recurse -Force #"
+  $userInput = Read-Host "Enter username"
+  $command = "Get-ADUser -Identity $userInput"
+  Invoke-Expression $command  # NEVER DO THIS!
+  ```
+  
+  **✅ SAFE - Parameter-based approach:**
+  
+  ```powershell
+  # Method 1: Direct parameter passing
+  $userInput = Read-Host "Enter username"
+  Get-ADUser -Identity $userInput  # Parameters are automatically escaped
+  
+  # Method 2: Splatting for dynamic parameters
+  $params = @{
+      Identity = $userInput
+      Properties = @('Name', 'Email')
+  }
+  Get-ADUser @params
+  
+  # Method 3: Using ScriptBlock with parameters
+  $scriptBlock = {
+      param($Username)
+      Get-ADUser -Identity $Username
+  }
+  & $scriptBlock -Username $userInput
+  
+  # Method 4: Dynamic command selection (safe)
+  $validCommands = @{
+      'users' = { Get-ADUser -Filter * }
+      'groups' = { Get-ADGroup -Filter * }
+  }
+  $choice = Read-Host "Enter type (users/groups)"
+  if ($validCommands.ContainsKey($choice)) {
+      & $validCommands[$choice]
+  }
+  ```
+  
+  If you must execute dynamic code, ensure the content is fully under your control or whitelisted. Also avoid using `Add-Type` or `New-Object` with user input without validation, as they could be leveraged for malicious actions.
 
 * **Secure Handling of Secrets:** Treat credentials, passwords, API keys with utmost care. **Do not embed plaintext passwords or keys** in scripts (even in comments). Use PowerShell's built-in **PSCredential** (username + SecureString password) for any authentication parameters. If a script needs to use a password, prefer to retrieve it from a secure location: e.g., Windows Credential Manager, Azure Key Vault, or the PowerShell SecretManagement module (which can use SecretStore or other vault backends). For instance, you might store a secret with `Set-Secret -Name MyAPI -Secret $secureString` and retrieve it in script via `Get-Secret -Name MyAPI`. This avoids hardcoding and keeps secrets encrypted at rest (Critical). If using SecureString conversion (e.g. `ConvertTo-SecureString -AsPlainText`), be aware that plaintext may reside briefly in memory – use it only with `-AsPlainText -Force` when absolutely needed, and prefer more secure patterns where possible. PSScriptAnalyzer rules **AvoidUsingPlainTextForPassword** and **UsePSCredentialType** emphasise using secure types and not raw strings.
 
 * **Script Signing and Execution Policy:** In enterprise environments, **script signing** is a recommended practice (Recommended). By signing your PowerShell scripts or modules with a trusted code-signing certificate, you ensure the script's integrity and origin. This works with Execution Policy set to *AllSigned* (requiring all scripts to be signed) or *RemoteSigned* (requiring signature for scripts from UNC/internet). While in practice some organisations use the laxer *RemoteSigned* (where internal scripts don't need signing), having a signing process for production scripts is more secure. It prevents tampering – a user cannot run a script that has been altered since signing (the signature check will fail). The trade-off is operational overhead of managing certificates and signing each update. Nonetheless, given PowerShell's role in system administration, signing is **Critical** for high-security contexts (like incident response tooling or scripts run on many servers).
-    
-    > **Note that Microsoft doesn't view the Execution Policy as a security boundary, nor should you.** It is easily bypassed. You should be using App Control of some description to restrict which scripts execute in your environment, not something as easily-bypassed as the PowerShell Execution Policy.
+  
+  > **Note that Microsoft doesn't view the Execution Policy as a security boundary, nor should you.** It is easily bypassed. You should be using App Control of some description to restrict which scripts execute in your environment, not something as easily-bypassed as the PowerShell Execution Policy.
 
 * **Least Privilege Principle:** Ensure your scripts run with the minimal privileges required. If a script doesn't need admin rights, avoid running it as admin. Conversely, if it **does** need elevation (e.g. modifying system state), make that explicit – use `#Requires -RunAsAdministrator` at the top so that it will refuse to run if not elevated. This prevents partial execution with insufficient rights (Critical). If a script performs actions on remote systems or sensitive data, consider using a dedicated service account with limited permissions for those tasks, rather than a domain admin account. This way, even if the script or credentials are compromised, the blast radius is limited.
 
@@ -150,6 +465,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **PowerShell Constrained Language Mode (CLM):** Be aware of CLM if operating in locked-down environments (like WDAC enforcement). In CLM, some .NET methods, COM objects, and Add-Type are blocked. Best practice is to avoid relying on those in critical scripts or detect CLM via `$ExecutionContext.SessionState.LanguageMode` and warn the user. Prefer using approved cmdlets or .NET classes that are allowed. This ensures your script runs even under constrained settings (Good to Have for highly secure contexts).
 
 **Anti-Patterns:** 
+
 - Hardcoding credentials or other secrets in plain text (one of the worst security sins) – not only can they be extracted from the script, but they might end up in version control or backups. 
 - Avoid using outdated or vulnerable protocols in scripts (e.g. forcing TLS 1.0, or using basic auth over HTTP) – instead update to use TLS 1.2/1.3 and secure APIs. 
 - Don't disable PowerShell security features for convenience: for example, setting `Set-ExecutionPolicy Unrestricted` or bypassing CLM without approval can expose the enterprise to risk. 
@@ -173,6 +489,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Manage Dependencies in Code:** Within scripts or modules, if you rely on an external program or specific files, check for their presence and version. For example, if your script calls an external EXE or a specific .dll, verify it exists and perhaps the version, before proceeding, giving a friendly error if not. This proactive approach is similar to `#Requires` but for non-PS components. It avoids weird runtime failures and makes the script more robust to environment differences.
 
 **Anti-Patterns:** 
+
 - Avoid duplicating code across multiple scripts – this often leads to inconsistencies and harder maintenance. If you find yourself copy-pasting functions, it's a sign to move them to a common module. 
 - Don't assume a module is loaded (except for core modules); always explicitly import or use #Requires. 
 - Also, don't leave module imports scattered in the middle of script logic – import at the top for clarity (and minimal performance impact) so dependency handling is centralised. 
@@ -186,7 +503,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Cross-Platform Considerations:** If your script is intended to run on Linux/macOS under PowerShell 7, avoid Windows-only features. **Do not use COM objects or WMI (Get-WmiObject)** which are Windows-specific (Get-CimInstance is the cross-platform way to query CIM/WMI, as it works on PS7 with WSMan or DCOM on Windows). Avoid registry access (`Get-Item HKLM:\...`) unless you guard it with `$IsWindows`. Use environment-agnostic methods: e.g., `[System.IO.Path]::Combine()` or `Join-Path` for file paths instead of hardcoding "C:\". Leverage `$Env:HOME` or `$HOME` instead of `C:\Users\Name`. You can check `$IsWindows`, `$IsLinux`, `$IsMacOS` automatic variables to branch OS-specific code. For example, if running on Linux, maybe skip a section that uses ActiveDirectory module. **Test** your script on all intended platforms – don't assume it "should work" because it's PS; line endings, case-sensitive file systems, presence of certain utilities (like `whoami` exists on Windows but on Linux you might call `id`) all differ (Recommended).
 
 * **Conditional Code for Compatibility:** Use conditional logic to handle version or platform differences. Example:
-
+  
   ```powershell
   if ($PSVersionTable.PSVersion -ge [Version]"7.0") {
       # Use new parameter or cmdlet available in PS7
@@ -196,9 +513,9 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
       Some-Command -LegacyParam ...
   }
   ```
-
+  
   Or platform example:
-
+  
   ```powershell
   if ($IsWindows) {
       $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
@@ -206,7 +523,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
       $user = $(whoami)  # use native whoami on Linux
   }
   ```
-
+  
   This ensures the script runs in both environments without error (Good to Have).
 
 * **Use Compatible APIs:** Prefer .NET and PowerShell APIs that are available in Core. For instance, instead of using older .NET classes that might be Windows-only, use newer cross-platform classes or PowerShell cmdlets. Many .NET Framework APIs are present in .NET Core, but some (like certain Microsoft.Office COM interops, etc.) are not. If you need to, use `Import-Module Microsoft.PowerShell.Management` and other modules which exist on all platforms for standard tasks (they often abstract differences). If targeting PS7, you can utilise `ForEach-Object -Parallel` etc., but make sure to either guard them or ensure PS7 usage. Conversely, avoid deprecated stuff like `Write-Host` in scripts as earlier – but note that in PS7, `Write-Host` now writes to the Information stream (still not pipeline output, but can be captured via redirection), a subtle difference from 5.1. These kinds of changes are minor but could impact how output is captured.
@@ -216,6 +533,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Module Availability:** Be aware that some Microsoft modules are only for Windows PowerShell (e.g., AzureAD module is 5.1 only, whereas Az module works on 7+). If your script must use AzureAD (no PS7 version as of now), then it won't run on PS7 – you might mention that in documentation or automatically fall back to using the MS Graph API via REST as an alternative. Likewise, older Exchange, SharePoint modules may not run on Core. The **trade-off** for compatibility might be using platform-neutral REST APIs or PowerShell 7 compatible modules where possible. This is more work upfront but pays off in flexibility.
 
 **Anti-Patterns:** 
+
 - Writing scripts that unknowingly assume Windows – e.g. using backslashes in paths, or `ipconfig` command – and then finding they fail in a Linux PowerShell container. 
 - Always examine whether each external call or method is portable. Don't use `$PSScriptRoot` for something and assume path separator; use `Join-Path $PSScriptRoot 'subfolder'`. 
 - Another anti-pattern is ignoring encoding issues: if your script produces a file that will be consumed by Windows and Linux, ensure the encoding is acceptable in both (UTF-8 is a good universal choice). 
@@ -227,7 +545,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 
 * **Use PSScriptAnalyzer and Linting:** Incorporate [**PSScriptAnalyzer**](https://learn.microsoft.com/en-us/powershell/utility-modules/psscriptanalyzer/overview?view=ps-modules) into your development workflow. This tool checks your script against a set of best practice rules (style, performance, etc.). Many IDEs (VS Code with the PowerShell extension) will run PSScriptAnalyzer in the background and highlight issues as you code. You can also customise the rules by using a settings file to enforce your team's style. For enterprise, it's wise to adopt an agreed-upon ruleset (maybe start with PSScriptAnalyzer's default, then adjust). Key rules include flagging unused variables, use of aliases, missing help, use of deprecated cmdlets, etc.. For example, it will warn if you used an alias like `gwmi` instead of `Get-WmiObject`, or if you used `Write-Host` in a script (which is discouraged). Treat these warnings as hints to improve. Making your code pass a static analysis not only catches potential bugs but also keeps style consistent (Recommended). Integrating this into CI (Continuous Integration) is even better – e.g. fail a build if the script doesn't meet certain criteria (like no Severity "Error" rules triggered).
 
-* **Consistent Style and Formatting:** Establish a coding style guide and stick to it. This includes indentation (typically 4 spaces, no tabs), bracket placement, pipeline placement (many style guides put `|` at the start of the next line when line-breaking pipelines), capitalisation (cmdlets and parameters can be written in any case, but consistency improves readability; e.g. always capitalise cmdlet names as they appear). The community "PowerShell Practice and Style" guide recommends K\&R style bracing and PascalCase for names, for example. Choose a convention for where to place curly braces (PowerShell generally puts the opening brace on the same line as the function/if/etc.). Ensure blank lines are used to separate logical sections of code, but avoid excessive blank lines. Remove any trailing whitespace. These might sound trivial, but a clean and uniform code style reduces cognitive load when reading scripts (Recommended).
+* **Consistent Style and Formatting:** Establish a coding style guide and stick to it. This includes indentation (typically 4 spaces, no tabs), bracket placement, pipeline placement (many style guides put `|` at the start of the next line when line-breaking pipelines), capitalisation (cmdlets and parameters can be written in any case, but consistency improves readability; e.g. always capitalise cmdlet names as they appear). The community "PowerShell Practice and Style" guide recommends K&R style bracing and PascalCase for names, for example. Choose a convention for where to place curly braces (PowerShell generally puts the opening brace on the same line as the function/if/etc.). Ensure blank lines are used to separate logical sections of code, but avoid excessive blank lines. Remove any trailing whitespace. These might sound trivial, but a clean and uniform code style reduces cognitive load when reading scripts (Recommended).
 
 * **Scripting vs. Toolmaking Mindset:** Write scripts as if you're writing a tool for someone else – because in enterprises, often others will run or maintain your script. That means handle edge cases, produce clear error messages, and avoid interactive prompts unless absolutely necessary. Provide examples in your help so others know how to use it. Also, **avoid using aliases and positional parameters** in the script itself (use full cmdlet/parameter names). Aliases are fine for one-time CLI usage, but in scripts they hurt clarity (PSScriptAnalyzer's *AvoidUsingCmdletAliases* rule will catch many). For instance, use `Where-Object` not `%`, `ForEach-Object` not `%{}`, `Select-Object` not `select`, etc., and always use `-ParameterName value` instead of relying on positional order (Recommended). This makes the script self-explanatory.
 
@@ -236,6 +554,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Splitting Code into Functions:** Even within a single script file, it's often beneficial to define helper functions for repetitive tasks or logically separate operations. For example, if your script does A, B, C in sequence, consider making `function Do-A { ... }`, `function Do-B { ... }`, etc., and then in the main body call those functions. This avoids long, deeply nested script code and improves readability by giving descriptive names to sections of logic. It also naturally makes your code testable (each function can be tested individually) and potentially reusable. Just ensure those helper functions are defined before they are used (in script files, define all functions at top or in a dedicated region). This approach is endorsed by the idea of writing "toolmaking" style functions even if they are only used in this script – it's cleaner and if needed, easy to export to a module later (Recommended).
 
 * **String Formatting and Interpolation:** Use PowerShell's native string formatting capabilities properly to avoid parsing errors and improve readability (Critical). **Preferred approaches:**
+  
   - **Subexpression syntax:** `"Processing $($user.Name) at $(Get-Date)"` for complex expressions
   - **Format operator:** `"Found {0} items in {1} seconds" -f $count, $elapsed` for structured formatting
   - **Simple variable expansion:** `"Hello $Name"` for basic variable insertion
@@ -245,6 +564,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Transcripts and Debugging Aids:** In a production scenario, you might not run with `-Verbose` normally. But having a **transcript** (Start-Transcript) can capture what happened if things go wrong. For maintainability, you could build in a debug mode to your script (e.g., a `-DebugMode` switch that maybe sets `$DebugPreference='Continue'` to break on Write-Debug, or triggers more detailed logging). This way, when a user reports "the script didn't work", you can ask them to run in debug/verbose mode or send the transcript. It's much easier to troubleshoot with that information. Additionally, ensure your script returns proper exit codes if used in scheduled tasks or CI pipelines (e.g., if a critical error happens, you might end with `exit 1` so the calling system knows it failed). Without this, a failed script might still appear successful to automation orchestrators.
 
 **Anti-Patterns:** 
+
 - Massive scripts with no modularisation, no comments, and cryptic variable names – they become "write-only" (only the author can understand them, and even that for a short time). 
 - Not documenting parameters and expected input/output makes a script much less useful for others. 
 - **Using string concatenation with `+` operator** instead of PowerShell's native string interpolation – this is not idiomatic and can be error-prone.
@@ -255,6 +575,203 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 - Also, avoid writing interactive prompts (`Read-Host`) for things like passwords or confirmations in scripts that are meant for automation – these block non-interactive use; instead use parameters and `ShouldProcess` for confirmations. 
 - **Saving files with UTF-8 BOM** which can cause parsing errors in PowerShell – always save as UTF-8 without BOM.
 - Lastly, ignoring PSScriptAnalyzer warnings without good reason can lead to technical debt – if a rule isn't applicable, consider disabling that rule via comment for that instance (with explanation) or in your settings, but don't just ignore all output of analysis.
+
+## Handling External Commands and Native Executables
+
+Working with external executables (like `robocopy.exe`, `netsh.exe`, `git.exe`) requires special attention as they don't follow PowerShell's error handling conventions. Understanding how to properly capture their output and handle their exit codes is critical for robust automation.
+
+### Exit Codes and $LASTEXITCODE
+
+Native executables communicate success/failure through exit codes, not PowerShell's error stream:
+
+```powershell
+# ❌ WRONG - This won't catch native exe failures
+try {
+    robocopy C:\Source C:\Dest /E
+    Write-Host "Success!"  # This runs even if robocopy failed!
+} catch {
+    Write-Host "This never executes for native exe failures"
+}
+
+# ✅ CORRECT - Check $LASTEXITCODE
+robocopy C:\Source C:\Dest /E
+if ($LASTEXITCODE -ne 0) {
+    throw "Robocopy failed with exit code: $LASTEXITCODE"
+}
+
+# ✅ BETTER - Wrap in function with proper error handling
+function Invoke-Robocopy {
+    param(
+        [string]$Source,
+        [string]$Destination,
+        [string[]]$Options = @('/E')
+    )
+
+    $result = robocopy $Source $Destination $Options
+
+    # Robocopy exit codes: 0-7 are success, 8+ are failures
+    if ($LASTEXITCODE -ge 8) {
+        $errorMessage = switch ($LASTEXITCODE) {
+            8  { "Some files could not be copied" }
+            16 { "Serious error. No files were copied" }
+            default { "Robocopy failed with exit code $LASTEXITCODE" }
+        }
+        throw $errorMessage
+    }
+
+    return @{
+        ExitCode = $LASTEXITCODE
+        Output = $result
+        Success = $LASTEXITCODE -lt 8
+    }
+}
+```
+
+### Capturing Output from Native Commands
+
+Native executables write to stdout and stderr differently than PowerShell cmdlets:
+
+```powershell
+# Method 1: Simple capture (stdout only)
+$output = ipconfig /all
+# Note: This captures stdout but stderr goes to console
+
+# Method 2: Redirect stderr to stdout (PS 7+ syntax)
+$output = myapp.exe 2>&1
+
+# Method 3: Separate stdout and stderr capture
+$outputFile = [System.IO.Path]::GetTempFileName()
+$errorFile = [System.IO.Path]::GetTempFileName()
+
+try {
+    $process = Start-Process -FilePath "myapp.exe" `
+                           -ArgumentList @("/param1", "/param2") `
+                           -RedirectStandardOutput $outputFile `
+                           -RedirectStandardError $errorFile `
+                           -NoNewWindow `
+                           -Wait `
+                           -PassThru
+
+    $stdout = Get-Content $outputFile -Raw
+    $stderr = Get-Content $errorFile -Raw
+
+    if ($process.ExitCode -ne 0) {
+        throw "Command failed with exit code $($process.ExitCode): $stderr"
+    }
+
+    return $stdout
+} finally {
+    Remove-Item $outputFile, $errorFile -Force -ErrorAction SilentlyContinue
+}
+```
+
+### PowerShell 7+ Native Command Error Handling
+
+PowerShell 7.2+ introduces `$PSNativeCommandUseErrorActionPreference` for better integration:
+
+```powershell
+# PowerShell 7.2+ only
+$PSNativeCommandUseErrorActionPreference = $true
+$ErrorActionPreference = 'Stop'
+
+# Now native commands respect ErrorActionPreference
+try {
+    git commit -m "test"  # Will throw if git returns non-zero
+} catch {
+    Write-Error "Git command failed: $_"
+}
+
+# For older versions, create a wrapper
+function Invoke-NativeCommand {
+    param(
+        [scriptblock]$ScriptBlock,
+        [int[]]$ValidExitCodes = @(0)
+    )
+
+    & $ScriptBlock
+    if ($LASTEXITCODE -notin $ValidExitCodes) {
+        throw "Native command {$ScriptBlock} failed with exit code $LASTEXITCODE"
+    }
+}
+
+# Usage
+Invoke-NativeCommand { git status } -ValidExitCodes 0,1
+```
+
+### Common Native Command Patterns
+
+```powershell
+# Pattern 1: Commands with complex success codes
+function Invoke-Ping {
+    param([string]$ComputerName)
+
+    $result = ping -n 1 $ComputerName
+
+    # Ping returns 0 for success, 1 for failure
+    return @{
+        Success = $LASTEXITCODE -eq 0
+        Output = $result
+        Target = $ComputerName
+    }
+}
+
+# Pattern 2: Parsing structured output
+function Get-NetshProfiles {
+    $output = netsh wlan show profiles
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to get WiFi profiles"
+    }
+
+    # Parse the text output into objects
+    $profiles = $output | Select-String "All User Profile\s*:\s*(.+)" |
+                         ForEach-Object { $_.Matches[0].Groups[1].Value.Trim() }
+
+    return $profiles | ForEach-Object {
+        [PSCustomObject]@{
+            ProfileName = $_
+            Type = 'WiFi'
+        }
+    }
+}
+
+# Pattern 3: Long-running processes with timeout
+function Start-ProcessWithTimeout {
+    param(
+        [string]$FilePath,
+        [string[]]$ArgumentList,
+        [int]$TimeoutSeconds = 30
+    )
+
+    $process = Start-Process -FilePath $FilePath `
+                           -ArgumentList $ArgumentList `
+                           -NoNewWindow `
+                           -PassThru
+
+    $completed = $process.WaitForExit($TimeoutSeconds * 1000)
+
+    if (-not $completed) {
+        $process.Kill()
+        throw "Process $FilePath timed out after $TimeoutSeconds seconds"
+    }
+
+    if ($process.ExitCode -ne 0) {
+        throw "Process $FilePath failed with exit code $($process.ExitCode)"
+    }
+}
+```
+
+### Best Practices for External Commands
+
+1. **Always check $LASTEXITCODE** after native commands
+2. **Document expected exit codes** in your functions
+3. **Wrap native commands** in PowerShell functions for consistent error handling
+4. **Use Start-Process** for complex scenarios requiring separate stdout/stderr capture
+5. **Consider timeout handling** for long-running external processes
+6. **Parse text output into objects** when possible for better PowerShell integration
+7. **Test with different locales** if parsing localized output
+
+**Version Note:** In PowerShell 7.3+, the experimental feature `PSNativeCommandErrorActionPreference` makes native command error handling more consistent with cmdlet behavior. Enable with: `Enable-ExperimentalFeature PSNativeCommandErrorActionPreference`
 
 ## Output and Interoperability
 
@@ -273,12 +790,192 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Interoperability with other tools:** Sometimes your script might need to call external utilities or accept input from other systems (like a JSON file from another app). Use standard data formats for interchange: PowerShell's `ConvertFrom-Json` and `ConvertTo-Json` are handy for reading/writing JSON, and `Import-CSV`/`Export-CSV` for CSV data. If writing to a file that will be read by something else, make sure to use appropriate encoding and include a header if needed (for CSV). If your script produces output meant for, say, a monitoring system that expects a certain text format, provide a distinct mode or a separate helper that formats specifically for that system, rather than complicating the primary output path. Essentially, keep the core output clean and then adapt/format for external targets as an optional step.
 
 **Anti-Patterns:** 
+
 - Using `Write-Host` or `Write-Output` to emit coloured or formatted text like an ASCII table – this output cannot be parsed or reused by other scripts. It might look nice for a report, but it's not automation-friendly. If pretty reports are needed, separate that concern: produce data, then in a different context, format it (e.g., perhaps generate an HTML report using `ConvertTo-Html` or use PSWriteHTML module). 
 - Another anti-pattern is writing verbose messages to the output stream inadvertently – e.g. forgetting to use `Write-Verbose` and instead using `Write-Output` for status messages will pollute the data output. Make sure any non-data messages go to the appropriate stream (Warning, Verbose, Debug, etc.) so as not to confuse consumers. Also, be cautious with `Out-File` or `Set-Content` inside your script – if the purpose is to provide output to the pipeline, you usually don't want to redirect it to a file internally (unless explicitly requested via a parameter). Let the user decide to pipe your output to a file or not.
 
 ## Testing and Debugging
 
-* **Embrace Pester for Unit Testing:** [Pester](https://pester.dev/) is the de facto testing framework for PowerShell. Write **unit tests** for your functions, especially those that perform critical logic (Critical). This might involve creating a separate tests file/module where you import your script/module and use `Describe/It` blocks to specify expected behaviour. Test normal cases (given valid inputs, does output match expected), edge cases (empty input, invalid input should throw or handle gracefully), and error cases (simulate an error and see if it's handled). For example, if you have a function `Get-UserData`, a Pester test might call it with a sample input and `Should -Not -Throw` and check that properties are present. This not only gives confidence but also serves as documentation for usage. Pester allows **mocking** of commands, which is crucial for tests – e.g., if your script calls `Send-MailMessage`, you can Mock it in tests so no real email is sent, and instead assert it was called with correct parameters. In an enterprise, having automated tests can catch regressions when you modify scripts or when environment changes occur (Recommended). Incorporate test runs in a CI pipeline if possible.
+* **Embrace Pester for Unit Testing:** [Pester](https://pester.dev/) is the de facto testing framework for PowerShell. Write **unit tests** for your functions, especially those that perform critical logic (Critical). This not only gives confidence but also serves as documentation for usage. In an enterprise, having automated tests can catch regressions when you modify scripts or when environment changes occur (Recommended). Incorporate test runs in a CI pipeline if possible.
+  
+  **Simple Pester Example:**
+  
+  First, create your function to test (Save as `Get-DiskSpaceInfo.ps1`):
+  
+  ```powershell
+  function Get-DiskSpaceInfo {
+      [CmdletBinding()]
+      param(
+          [Parameter(Mandatory=$true)]
+          [string]$ComputerName,
+  
+          [Parameter()]
+          [int]$ThresholdPercent = 20
+      )
+  
+      try {
+          $disk = Get-CimInstance -ClassName Win32_LogicalDisk -ComputerName $ComputerName -Filter "DriveType=3" -ErrorAction Stop |
+              Where-Object { $_.Size -gt 0 } |
+              Select-Object @{Name='Computer';Expression={$ComputerName}},
+                           DeviceID,
+                           @{Name='FreeSpacePercent';Expression={[math]::Round(($_.FreeSpace/$_.Size)*100,2)}},
+                           @{Name='FreeSpaceGB';Expression={[math]::Round($_.FreeSpace/1GB,2)}},
+                           @{Name='SizeGB';Expression={[math]::Round($_.Size/1GB,2)}}
+  
+          # Check if any disk is below threshold
+          $lowSpace = $disk | Where-Object { $_.FreeSpacePercent -lt $ThresholdPercent }
+          if ($lowSpace) {
+              Write-Warning "Low disk space detected on $ComputerName"
+          }
+  
+          return $disk
+      }
+      catch {
+          Write-Error "Failed to get disk info for ${ComputerName}: $_"
+          throw
+      }
+  }
+  ```
+  
+  Now create the Pester test file (Save as `Get-DiskSpaceInfo.Tests.ps1`):
+  
+  ```powershell
+  BeforeAll {
+      # Import the function to test
+      . $PSScriptRoot\Get-DiskSpaceInfo.ps1
+  }
+  
+  Describe 'Get-DiskSpaceInfo' {
+      Context 'When querying valid computer' {
+          BeforeEach {
+              # Mock the CIM call to return predictable data
+              Mock Get-CimInstance {
+                  [PSCustomObject]@{
+                      DeviceID = 'C:'
+                      Size = 100GB
+                      FreeSpace = 25GB
+                      DriveType = 3
+                  }
+              }
+          }
+  
+          It 'Should return disk information object' {
+              $result = Get-DiskSpaceInfo -ComputerName 'TestPC'
+  
+              $result | Should -Not -BeNullOrEmpty
+              $result.Computer | Should -Be 'TestPC'
+              $result.DeviceID | Should -Be 'C:'
+              $result.FreeSpacePercent | Should -Be 25
+          }
+  
+          It 'Should calculate GB values correctly' {
+              $result = Get-DiskSpaceInfo -ComputerName 'TestPC'
+  
+              $result.FreeSpaceGB | Should -Be 25
+              $result.SizeGB | Should -Be 100
+          }
+  
+          It 'Should call Get-CimInstance with correct parameters' {
+              Get-DiskSpaceInfo -ComputerName 'TestPC'
+  
+              Assert-MockCalled Get-CimInstance -Times 1 -Exactly -ParameterFilter {
+                  $ComputerName -eq 'TestPC' -and 
+                  $ClassName -eq 'Win32_LogicalDisk' -and
+                  $Filter -eq 'DriveType=3'
+              }
+          }
+  
+          It 'Should warn when disk space is below threshold' {
+              Mock Write-Warning
+              Mock Get-CimInstance {
+                  [PSCustomObject]@{
+                      DeviceID = 'C:'
+                      Size = 100GB
+                      FreeSpace = 10GB  # 10% free
+                      DriveType = 3
+                  }
+              }
+  
+              Get-DiskSpaceInfo -ComputerName 'TestPC' -ThresholdPercent 20
+  
+              Assert-MockCalled Write-Warning -Times 1 -ParameterFilter {
+                  $Message -like '*Low disk space detected*'
+              }
+          }
+      }
+  
+      Context 'When computer is unreachable' {
+          It 'Should throw an error' {
+              Mock Get-CimInstance { throw "Cannot connect to computer" }
+  
+              { Get-DiskSpaceInfo -ComputerName 'OfflinePC' -ErrorAction Stop } | 
+                  Should -Throw -ErrorId 'Failed to get disk info*'
+          }
+  
+          It 'Should write descriptive error message' {
+              Mock Get-CimInstance { throw "Cannot connect to computer" }
+              Mock Write-Error
+  
+              try {
+                  Get-DiskSpaceInfo -ComputerName 'OfflinePC'
+              } catch { }
+  
+              Assert-MockCalled Write-Error -Times 1 -ParameterFilter {
+                  $Message -like '*Failed to get disk info for OfflinePC*'
+              }
+          }
+      }
+  
+      Context 'Edge Cases' {
+          It 'Should handle empty disk results gracefully' {
+              Mock Get-CimInstance { $null }
+  
+              $result = Get-DiskSpaceInfo -ComputerName 'TestPC'
+              $result | Should -BeNullOrEmpty
+          }
+  
+          It 'Should filter out disks with zero size' {
+              Mock Get-CimInstance {
+                  @(
+                      [PSCustomObject]@{DeviceID='C:'; Size=100GB; FreeSpace=50GB; DriveType=3}
+                      [PSCustomObject]@{DeviceID='D:'; Size=0; FreeSpace=0; DriveType=3}
+                  )
+              }
+  
+              $result = Get-DiskSpaceInfo -ComputerName 'TestPC'
+              $result.Count | Should -Be 1
+              $result.DeviceID | Should -Be 'C:'
+          }
+      }
+  }
+  
+  # Run the tests (from PowerShell console)
+  # Invoke-Pester -Path .\Get-DiskSpaceInfo.Tests.ps1 -Output Detailed
+  ```
+  
+  **Key Pester Concepts:**
+  
+  - **Describe/Context/It**: Organize tests hierarchically
+  - **Mock**: Replace real cmdlets with test doubles to isolate code
+  - **Should**: Assert expected outcomes
+  - **BeforeAll/BeforeEach**: Setup code for tests
+  - **Assert-MockCalled**: Verify mocked functions were called correctly
+  
+  **Running Pester Tests:**
+  
+  ```powershell
+  # Install Pester if needed
+  Install-Module -Name Pester -Force -SkipPublisherCheck
+  
+  # Run tests with detailed output
+  Invoke-Pester -Path .\Get-DiskSpaceInfo.Tests.ps1 -Output Detailed
+  
+  # Run with code coverage
+  Invoke-Pester -Path .\Get-DiskSpaceInfo.Tests.ps1 -CodeCoverage .\Get-DiskSpaceInfo.ps1
+  
+  # CI/CD Integration (outputs test results as NUnit XML)
+  Invoke-Pester -Path .\Tests\ -OutputFile TestResults.xml -OutputFormat NUnitXml
+  ```
 
 * **Simulate and Force Error Paths:** It's important to test how your script behaves on failure paths. Use Pester to simulate exceptions (e.g., use `Mock Some-Command { throw "fail" }` to see if your try/catch catches it properly). You can also design your functions with a **fault injection** mechanism for testing; for instance, a hidden parameter like `-SimulateError` that, when set (and perhaps only enabled in a non-prod context), will deliberately trigger an error at a certain point. This is not always needed, but can be useful to verify your error handling logic (Good to Have). At minimum, do manual tests by providing bad input or causing a known error (like pointing to a non-existent server) and observe if your script handles it gracefully (does it throw a meaningful message or just traceback? Ideally the former).
 
@@ -293,6 +990,7 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 * **Using Transcripts and Logging in Debug:** As noted in maintainability, enabling transcripts (`Start-Transcript`) can help capture elusive issues that only occur in production (for example, an environment-specific error). If a script is run via automation (like orchestrator or cron), consider building in that it starts a transcript to a known location (with maybe timestamp in name) at start and stops at end. This way, if something goes wrong, you have a full log of all output and errors. Just be careful with sensitive info (transcript captures everything including secrets in output). Alternatively, implement your own logging inside the script to capture key steps (which might be safer if you omit sensitive data).
 
 **Anti-Patterns:**
+
 - Not testing at all and using production as "test" – this can be disastrous if the script has a destructive bug. 
 - Relying solely on manual testing is okay for very small changes, but as scripts get complex, manual testing might miss scenarios. 
 - Another anti-pattern is writing tests after long delays or not updating tests when the script changes – tests should evolve with the code. 
@@ -307,49 +1005,50 @@ Feed this to your LLM of choice, to ensure that it generates quality code.
 Below is a concise checklist of key best practices, categorised by priority:
 
 * **Critical:**
-
+  
   1. **Comment-Based Help & Metadata:** Include Synopsis, Description, Parameter info, and Examples in every script/function for clarity.
-  2. **Param Block with Validation:** Use a `param()` block with `[CmdletBinding()]` and appropriate validation attributes (e.g. ValidateSet, Mandatory) instead of relying on prompts or defaults.
+  2. **Param Block with Validation:** Use a `param()` block with `[CmdletBinding()]` and appropriate validation attributes (e.g. ValidateSet with IgnoreCase, Mandatory) instead of relying on prompts or defaults.
   3. **Approved Verb-Noun Naming:** Name scripts/functions with approved verbs and singular nouns (e.g. `Get-Item`, `New-Report`), to align with PowerShell standards and avoid import warnings.
-  4. **Output Objects Not Text:** Always output structured objects to the pipeline, not formatted text or host-only output, enabling downstream processing and reuse.
-  5. **Error Handling with Try/Catch:** Wrap risky operations in try/catch blocks and handle errors gracefully; use `-ErrorAction Stop` on cmdlets to catch non-terminating errors.
-  6. **No Plaintext Secrets:** Never hardcode passwords or secrets; use `PSCredential` objects or vault/secure store solutions to handle sensitive data.
-  7. **Avoid Invoke-Expression & Injection:** Do not use `Invoke-Expression` with untrusted input or construct commands from strings – this is a major security risk.
-  8. **SupportsShouldProcess for Changes:** Implement `SupportsShouldProcess` (WhatIf/Confirm) for any action that changes system state (files, settings, user accounts, etc.).
-  9. **Scope and Strict Mode:** Use `Set-StrictMode -Latest` to catch undefined variables; avoid global state and ensure variables are properly scoped to prevent side effects.
-  10. **Logging and Audit:** Log important actions and errors (via verbose, warning, or error streams) and/or use transcripts. Ensure actions in security scripts are auditable (who ran, what was changed).
+  4. **Consistent Naming Conventions:** Use Pascal Case for functions, parameters, properties; camelCase for local variables.
+  5. **Output Objects Not Text:** Always output structured objects to the pipeline, not formatted text or host-only output, enabling downstream processing and reuse.
+  6. **Error Handling with Try/Catch/Finally:** Wrap risky operations in try/catch blocks and handle errors gracefully; use `-ErrorAction Stop` on cmdlets to catch non-terminating errors; always clean up in finally blocks.
+  7. **No Plaintext Secrets:** Never hardcode passwords or secrets; use `PSCredential` objects with proper [Credential()] attribute pattern, or vault/secure store solutions to handle sensitive data.
+  8. **Avoid Invoke-Expression & Injection:** Do not use `Invoke-Expression` with untrusted input or construct commands from strings – this is a major security risk.
+  9. **Replace Deprecated Cmdlets:** Use Get-WinEvent instead of Get-EventLog, Get-CimInstance instead of Get-WmiObject.
+  10. **Filter at Source:** Always filter data at the source (server-side) rather than in PowerShell pipelines for performance.
 
 * **Recommended:**
-
-  11. **Use Source Control & Versioning:** Store scripts in source control (git), use semantic versioning and update version/tags on changes for traceability. Include version info in script comments or module manifest.
-  12. **PSScriptAnalyzer Clean:** Run PSScriptAnalyzer and address warnings (e.g. avoid aliases, empty catches, use singular nouns, etc.) to keep code quality high.
-  13. **Module-ise for Reuse:** Package related functions into modules with manifests (psd1) specifying Author, Version, etc., and import as needed. Use `#Requires -Modules X` in scripts to ensure dependencies are present.
-  14. **Retry Logic for Transients:** Implement retry with exponential backoff for transient failures (like network glitches) and distinguish those from permanent errors to improve resilience.
-  15. **Use Verbose/Debug for Messaging:** Utilise `Write-Verbose` for runtime messages and `Write-Debug` for internal state info, instead of `Write-Host`. This allows users to turn on/off these messages with `-Verbose` or `-Debug`.
-  16. **PowerShell 7 Compatibility:** Write scripts compatible with PS7 when possible – avoid Windows-only APIs or guard them with `$IsWindows`. Use cross-platform alternatives (e.g. `Get-CimInstance` vs `Get-WmiObject`) for portability.
-  17. **ConfirmImpact and Force:** For destructive actions, assign an appropriate `ConfirmImpact` level and consider adding a `-Force` switch to bypass confirmations in non-interactive scenarios.
-  18. **Test Path and Inputs:** Validate files, paths, and other inputs early (e.g. use `Test-Path` in a ValidateScript or in code) to fail fast with clear error if something is amiss (like missing file or lack of access).
-  19. **Comments for Intent:** Include brief comments explaining complex logic or important decisions/trade-offs in code. Avoid obvious comments; focus on intent and rationale behind code segments.
-  20. **Use Proper Types:** Strongly type parameters and variables when possible (e.g., `[int]$Count`, `[DateTime]$Start`) to catch type conversion issues early. Use `[switch]` for boolean flags instead of `[bool]` for more idiomatic usage.
+  
+  11. **SupportsShouldProcess for Changes:** Implement `SupportsShouldProcess` (WhatIf/Confirm) for any action that changes system state (files, settings, user accounts, etc.).
+  12. **Scope and Strict Mode:** Use `Set-StrictMode -Latest` to catch undefined variables; avoid global state and ensure variables are properly scoped to prevent side effects.
+  13. **Use Native Cmdlets:** Always check for existing PowerShell functionality before writing custom code (date parsing, path operations, data manipulation).
+  14. **Logging and Audit:** Log important actions and errors (via verbose, warning, or error streams) and/or use transcripts. Ensure actions in security scripts are auditable (who ran, what was changed).
+  15. **Use Source Control & Versioning:** Store scripts in source control (git), use semantic versioning and update version/tags on changes for traceability. Include version info in script comments or module manifest. Save as UTF-8 without BOM.
+  16. **PSScriptAnalyzer Clean:** Run PSScriptAnalyzer and address warnings (e.g. avoid aliases, empty catches, use singular nouns, etc.) to keep code quality high.
+  17. **Module-ise for Reuse:** Package related functions into modules with manifests (psd1) specifying Author, Version, etc., and import as needed. Use `#Requires -Modules X` in scripts to ensure dependencies are present.
+  18. **Proper Parameter Types:** Use unsigned integers for counts, proper credential patterns, never use `= $false` on switch parameters.
+  19. **Performance-Aware Looping:** Choose foreach statement for known collections (fast), ForEach-Object for streaming/pipeline scenarios (memory efficient).
+  20. **Retry Logic for Transients:** Implement retry with exponential backoff for transient failures (like network glitches) and distinguish those from permanent errors to improve resilience.
 
 * **Good to Have:**
-
-  21. **Region Tags for Organisation:** Use `#region` to collapse sections in editors (e.g. "#region Functions", "#region Main") – helps navigate larger scripts without affecting execution.
-  22. **Splatting for Long Parameters:** Use splatting (`@params`) to pass parameters for better readability especially when calling commands with many parameters or forwarding parameters.
-  23. **Default Parameter Sets:** When using parameter sets, define `DefaultParameterSetName` in `CmdletBinding` to avoid ambiguity. This enhances user experience and prevents confusing errors.
-  24. **Format Output (Advanced):** If creating custom object types, provide a format.ps1xml in modules for pretty default formatting rather than formatting in the script. Also consider a Types.ps1xml for custom type accelerators or methods (for advanced tooling scenarios).
-  25. **Pipeline Efficiency:** Where appropriate, make functions pipeline-aware (process input objects one at a time using `process{}`) so they can be part of larger pipelines efficiently.
-  26. **Transcripts in Scheduled Runs:** If running as a scheduled task or CI job, consider auto-starting a transcript to capture output for troubleshooting.
-  27. **Graceful Stop/Exit:** Handle user cancellations or stop requests (`CTRL+C` or `$host.UI.RawUI.ReadKey()`) if applicable, and cleanup (e.g., remove temp files) if script is interrupted. Honour `$Stopping` in loops (for long-running scripts, check `$PSCmdlet.ShouldExitCurrentIteration` or simply `$Stopping` to break out if PowerShell is trying to stop the script).
-  28. **Documentation for Dependencies:** In script/module documentation, list any external requirements (modules, software, permissions). E.g., "Requires Azure Az module v5+" or "User running must have local admin rights".
-  29. **No Empty Catch or Finally:** Every `catch` should handle or log the error; every `finally` should be for cleanup, not logic. Empty catches make debugging hard.
-  30. **Editor and Environment:** Use Visual Studio Code with the PowerShell extension (and PowerShell Preview extension for latest features) for script development. This provides IntelliSense, inline PSScriptAnalyzer feedback, and an integrated debugger. (Good practice to mention, though not code-specific.)
+  
+  21. **Line Length and Indentation:** Keep lines under 115-120 characters, use 4 spaces for indentation (not tabs).
+  22. **Use Verbose/Debug for Messaging:** Utilise `Write-Verbose` for runtime messages and `Write-Debug` for internal state info, instead of `Write-Host`. This allows users to turn on/off these messages with `-Verbose` or `-Debug`.
+  23. **PowerShell 7 Compatibility:** Write scripts compatible with PS7 when possible – avoid Windows-only APIs or guard them with `$IsWindows`. Use cross-platform alternatives (e.g. `Get-CimInstance` vs `Get-WmiObject`) for portability.
+  24. **ConfirmImpact and Force:** For destructive actions, assign an appropriate `ConfirmImpact` level and consider adding a `-Force` switch to bypass confirmations in non-interactive scenarios.
+  25. **Test Path and Inputs:** Validate files, paths, and other inputs early (e.g. use `Test-Path` in a ValidateScript or in code) to fail fast with clear error if something is amiss (like missing file or lack of access).
+  26. **Comments for Intent:** Include brief comments explaining complex logic or important decisions/trade-offs in code. Avoid obvious comments; focus on intent and rationale behind code segments.
+  27. **Use Proper Types:** Strongly type parameters and variables when possible (e.g., `[int]$Count`, `[DateTime]$Start`) to catch type conversion issues early. Use `[switch]` for boolean flags instead of `[bool]` for more idiomatic usage.
+  28. **Region Tags for Organisation:** Use `#region` to collapse sections in editors (e.g. "#region Functions", "#region Main") – helps navigate larger scripts without affecting execution.
+  29. **Splatting for Long Parameters:** Use splatting (`@params`) to pass parameters for better readability especially when calling commands with many parameters or forwarding parameters.
+  30. **Default Parameter Sets:** When using parameter sets, define `DefaultParameterSetName` in `CmdletBinding` to avoid ambiguity. This enhances user experience and prevents confusing errors.
 
 ## 📋 PowerShell Scripting Best Practices Cheat Sheet
 
 **Structure & Style:**
 
 * **Template:** Always start with `#requires` (version, modules) and `<# .SYNOPSIS/.DESCRIPTION #>` help. Then `param(...)` with `[CmdletBinding()]`. **Script files:** Use linear execution after param block. **Functions:** Use `Begin/Process/End` blocks for pipeline functions. Keep functions short and focused.
+* **Naming:** Use Pascal Case for functions, parameters, properties; camelCase for local variables. Keep lines under 115-120 chars, use 4-space indents.
 * **String Formatting:** Use `"Variable is $var"` for simple cases. Use `"Complex: $($obj.Property)"` for expressions. Use `"Template {0} with {1}" -f $val1, $val2` for structured formatting. **Avoid** `+` concatenation and parsing-error patterns like `"($($var)ms)"`.
 * **Consistency:** Use 4 spaces for indent. Use PascalCase for Names (Cmdlets, Params), lowercase for keywords (`if`, `foreach`), UPPERCASE for help tags in comments. Consistent naming and layout across scripts.
 * **Strict Mode:** Enable strict mode (`Set-StrictMode -Version Latest`) to catch undefined vars and subtle bugs early.
@@ -361,34 +1060,47 @@ Below is a concise checklist of key best practices, categorised by priority:
 * **CmdletBinding:** Always include `[CmdletBinding()]` for functions – gives common parameters (`-Verbose`, `-ErrorAction`, etc.).
 * **ShouldProcess:** Use `SupportsShouldProcess=$true` for actions (Modify, Remove, etc.). Call `if($PSCmdlet.ShouldProcess(...)){ ... }` around changes. Implement `-Confirm` and honour `-WhatIf`.
 * **Output:** Emit objects (prefer `[PSCustomObject]` or standard .NET objects). **No** `Write-Host` for data. Let users format or export as needed.
+* **Native First:** Always check for native cmdlets before writing custom code (Get-Date, Split-Path, Group-Object, etc.).
+* **Replace Deprecated:** Get-WinEvent not Get-EventLog; Get-CimInstance not Get-WmiObject.
 * **OutputType:** Optionally use `[OutputType()]` to declare return object type(s) for documentation.
 * **No Return for Pipeline:** In advanced functions, output in `Process` block and let the function return implicitly (avoid using the `return` keyword for output).
 
 **Parameters:**
 
-* **Validation:** Use `[ValidateNotNullOrEmpty]`, `[ValidateSet()]`, `[ValidateRange()]`, etc., to catch bad inputs.
-* **Mandatory:** Mark required params as Mandatory=\$true so PowerShell prompts if missing (or throws in non-interactive). Don't prompt with Read-Host inside scripts.
-* **Secure Input:** Use `[PSCredential]` for credentials (instead of string username/password). Use SecureString for secrets or integrate with SecretManagement for pulling secrets securely.
+* **Validation:** Use `[ValidateNotNullOrEmpty]`, `[ValidateSet(IgnoreCase=$true)]`, `[ValidateRange()]`, etc., to catch bad inputs.
+* **Mandatory:** Mark required params as Mandatory=$true so PowerShell prompts if missing (or throws in non-interactive). Don't prompt with Read-Host inside scripts.
+* **Switch Parameters:** Never use `= $false` on switches – they're $false by default.
+* **Unsigned for Counts:** Use `[uint32]` for counts, retries, timeouts that can't be negative.
+* **Secure Input:** Use proper credential pattern with `[PSCredential]` and `[Credential()]` attributes. Use SecureString for secrets or integrate with SecretManagement.
 * **Parameter Sets:** Organise parameters into sets if they are mutually exclusive. Set `DefaultParameterSetName` to a sensible default.
 * **Common Param Names:** Use standard names (e.g. `Path`, `LiteralPath`, `Credential`, `Force`) where applicable, to meet user expectations.
 * **Aliases:** Provide `[Alias()]` for backward compatibility or convenience (e.g. Alias "CN" for a param named ComputerName), but primary name should be clear.
 
 **Error Handling:**
 
-* **Try/Catch:** Wrap operations in try/catch. Use `-ErrorAction Stop` to make non-terminating errors catchable.
+* **Try/Catch/Finally:** Wrap operations in try/catch. Use `-ErrorAction Stop` to make non-terminating errors catchable. Always use finally for cleanup.
+* **Capture Immediately:** In catch, save error to variable first: `$err = $_` before doing anything else.
 * **Informative Errors:** Throw or write errors with clear messages. Include identifying info (e.g. `"Failed to remove user $User: $_"`).
 * **Non-Terminating vs Terminating:** Use `Write-Error` for recoverable issues (allows continuing) and `throw`/`ThrowTerminatingError` for critical ones to stop processing.
 * **No Empty Catch:** Always handle or log in catch blocks – don't swallow exceptions silently.
-* **\$ErrorActionPreference:** Optionally set `$ErrorActionPreference = 'Stop'` at start of script (and revert if needed) to ensure any error stops execution for global scripts.
-* **Finally/Cleanup:** Use `finally` to clean up resources (close files, dispose objects) regardless of errors.
+* **$ErrorActionPreference:** Optionally set `$ErrorActionPreference = 'Stop'` at start of script (and revert if needed) to ensure any error stops execution for global scripts.
+* **Resource Cleanup:** Use `finally` to close connections, dispose objects, stop transcripts regardless of errors.
+
+**Performance:**
+
+* **Filter at Source:** Use server-side filtering (Get-WinEvent -FilterHashtable, AD -Filter, SQL WHERE) not pipeline Where-Object.
+* **foreach vs ForEach-Object:** Use foreach statement for known collections (fast), ForEach-Object for streaming/pipelines (memory efficient).
+* **Array Building:** Avoid += in loops. Use [List[PSObject]]::new() or capture foreach output directly.
+* **Native Cmdlets:** Use built-in functionality (Get-Date handles "yesterday", Split-Path for paths, Group-Object for grouping).
 
 **Security:**
 
-* **No Plain Text Creds:** Never store passwords in script. Use `Get-Credential` or vault. **Avoid** `ConvertTo-SecureString -AsPlainText` except for automation with secure external storage.
+* **No Plain Text Creds:** Never store passwords in script. Use `Get-Credential` or vault. Use proper [Credential()] pattern for flexibility.
+* **No Invoke-Expression:** Never use on user input – injection risk. Use parameterised cmdlets or splatting.
 * **Sign Scripts:** Sign production scripts with a code-signing certificate if possible. Use `AllSigned` or `RemoteSigned` execution policy enterprise-wide.
 * **Least Privilege:** Run scripts with least privileges needed. If admin rights required, enforce via `#Requires -RunAsAdministrator`.
-* **Input Sanitisation:** If your script uses input in commands (like building a file path or SQL query), validate or sanitise to prevent injection. Avoid `Invoke-Expression` on any user input.
-* **Logging/Audit:** Log actions and results to a secure log (file or event log). Include timestamps and who ran the script (e.g. capture `$env:USERNAME` or context). For IR scripts, log to an immutable store if needed for evidentiary reasons.
+* **Input Sanitisation:** If your script uses input in commands (like building a file path or SQL query), validate or sanitise to prevent injection.
+* **Logging/Audit:** Log actions and results to a secure log (file or event log). Include timestamps and who ran the script (e.g. capture `$env:USERNAME` or context).
 * **Constrained Language:** Be aware if CLM is enabled (no Add-Type, limited .NET). Stick to approved cmdlets in locked-down environments.
 
 **Modules & Dependencies:**
@@ -403,29 +1115,29 @@ Below is a concise checklist of key best practices, categorised by priority:
 **Cross-Version/Platform:**
 
 * **Windows PS vs PS Core:** Test on both Windows PowerShell 5.1 and PowerShell 7+ if supporting both. Note differences (PS7 has newer features, different defaults).
-* **Platform Checks:** Use `$IsWindows/$IsLinux` to branch OS-specific code when necessary. E.g. if using `Send-MailMessage` (Windows only), consider `Send-MailKitMessage` on Core, or use `MailKit` library.
-* **Avoid WMI/COM for X-plat:** Use REST APIs, .NET Core compatible libraries or cross-platform cmdlets (like `Get-CimInstance` instead of old WMI cmdlets) for anything that might run on Linux/macOS.
-* **Paths:** Use `Join-Path` or `[IO.Path]::Combine` for file paths; avoid hardcoded `"C:\..."` in code. For Linux, paths start at `/`.
+* **Platform Checks:** Use `$IsWindows/$IsLinux` to branch OS-specific code when necessary.
+* **Avoid WMI/COM for X-plat:** Use REST APIs, .NET Core compatible libraries or cross-platform cmdlets (like `Get-CimInstance` instead of old WMI cmdlets).
+* **Paths:** Use `Join-Path` or `[IO.Path]::Combine` for file paths; avoid hardcoded `"C:\..."` in code.
 * **Encoding:** Remember `Out-File` default encoding differs (PS7 = UTF8, PS5 = UTF16). Specify `-Encoding` if consumers require a specific format.
-* **Testing:** If claiming cross-platform support, test key functionality on each platform (file operations, credential usage, etc. can differ per OS).
+* **Testing:** If claiming cross-platform support, test key functionality on each platform.
 
 **Maintainability:**
 
-* **Readable Code:** Use whitespace and line breaks to make code readable. For long pipelines, consider one segment per line (with pipeline `|` at line starts or ends uniformly).
+* **Readable Code:** Use whitespace and line breaks to make code readable. For long pipelines, consider one segment per line.
 * **No Aliases in Scripts:** Write full cmdlet names (e.g. `Where-Object` not `?`), full parameter names (no positional use for readability).
-* **DRY (Don't Repeat Yourself):** Factor out repetitive code into functions rather than copy-paste. Makes future changes easier and reduces mistakes.
+* **DRY (Don't Repeat Yourself):** Factor out repetitive code into functions rather than copy-paste.
 * **Comments & Help:** Keep comment-based help updated when code changes. Use `.PARAMETER` to explain each param's purpose, `.EXAMPLE` to show usage.
-* **Tool Output vs Host Output:** Use `Write-Verbose`/`Write-Progress` for updates to user (progress, status), not echoing to output. Reserve output stream for actual results.
-* **Pester Tests:** Write Pester tests for functions if possible. At least, test critical paths and edge cases. This ensures reliability when refactoring.
-* **CI Integration:** If feasible, integrate script testing and style check in CI pipelines (e.g., run PSScriptAnalyzer and Pester on PRs).
+* **Tool Output vs Host Output:** Use `Write-Verbose`/`Write-Progress` for updates to user (progress, status), not echoing to output.
+* **Pester Tests:** Write Pester tests for functions if possible. At least, test critical paths and edge cases.
+* **CI Integration:** If feasible, integrate script testing and style check in CI pipelines.
 
 **Debugging & Testing:**
 
-* **Verbose/Debug Switches:** Encourage using `-Verbose` for debug info. Provide ample `Write-Verbose` messages in your script (they don't show unless `-Verbose` is used).
-* **Breakpoints:** Use the debugger in VSCode or `Set-PSBreakpoint` for complex debugging. Use `$DebugPreference="Break"` with `Write-Debug` strategically to inspect state.
+* **Verbose/Debug Switches:** Encourage using `-Verbose` for debug info. Provide ample `Write-Verbose` messages in your script.
+* **Breakpoints:** Use the debugger in VSCode or `Set-PSBreakpoint` for complex debugging.
 * **Transient Fail Testing:** Simulate failures (e.g. via Pester mocks or by toggling network) to ensure your error handling and retry logic works.
-* **User Feedback:** If a script might run long, use `Write-Progress` to show activity. That improves perceived reliability (script isn't hanging).
-* **Clean Exit:** If script completes (or is interrupted), ensure open files or connections are closed. Set exit codes appropriately (`exit 0` for success, non-zero for errors) if the script is used in automated jobs.
+* **User Feedback:** If a script might run long, use `Write-Progress` to show activity.
+* **Clean Exit:** If script completes (or is interrupted), ensure open files or connections are closed. Set exit codes appropriately.
 
 This cheat sheet can be used as a quick-reference for script development and code reviews, ensuring adherence to enterprise PowerShell standards.
 
@@ -436,6 +1148,7 @@ Based on real-world debugging experience, here are specific mistakes that cause 
 ### String Formatting Pitfalls
 
 **Problem:** String interpolation parsing errors
+
 ```powershell
 # ❌ WRONG - Causes "Unexpected token 'ms'" error
 Write-Verbose "Response time ($($stopwatch.ElapsedMilliseconds)ms)"
@@ -446,6 +1159,7 @@ Write-Verbose ("Response time ({0}ms)" -f $stopwatch.ElapsedMilliseconds)
 ```
 
 **Problem:** String concatenation in PowerShell
+
 ```powershell
 # ❌ WRONG - Not idiomatic PowerShell
 $message = "User " + $name + " processed at " + $timestamp
@@ -457,6 +1171,7 @@ $message = "User $name processed at $timestamp"
 ### Script Structure Pitfalls
 
 **Problem:** Using begin/process/end blocks in script files
+
 ```powershell
 # ❌ WRONG - Causes "The term 'begin' is not recognized" error
 param($Domain)
@@ -478,6 +1193,7 @@ foreach ($DomainName in $Domain) {
 ```
 
 **Problem:** Incorrect array handling in rate limiting
+
 ```powershell
 # ❌ WRONG - Can cause "Count property not found" error
 $script:RequestTimes = $script:RequestTimes | Where-Object { $_ -gt $cutoffTime }
@@ -486,12 +1202,70 @@ $script:RequestTimes = $script:RequestTimes | Where-Object { $_ -gt $cutoffTime 
 $script:RequestTimes = @($script:RequestTimes | Where-Object { $_ -gt $cutoffTime })
 ```
 
+### Parameter Pitfalls
+
+**Problem:** Adding defaults to switch parameters
+
+```powershell
+# ❌ WRONG - Anti-pattern, redundant
+param(
+    [switch]$Force = $false
+)
+
+# ✅ CORRECT - Switches are $false by default
+param(
+    [switch]$Force
+)
+```
+
+**Problem:** Using signed integers for counts
+
+```powershell
+# ❌ WRONG - Allows negative values
+param(
+    [int]$MaxRetries = 3
+)
+
+# ✅ CORRECT - Self-documenting, prevents negatives
+param(
+    [uint32]$MaxRetries = 3
+)
+```
+
+### Performance Pitfalls
+
+**Problem:** Pipeline filtering instead of source filtering
+
+```powershell
+# ❌ WRONG - Retrieves ALL users, then filters (SLOW!)
+Get-ADUser -Filter * | Where-Object { $_.Enabled -eq $true }
+
+# ✅ CORRECT - Server-side filtering (FAST)
+Get-ADUser -Filter "Enabled -eq `$true"
+```
+
+**Problem:** Array concatenation in loops
+
+```powershell
+# ❌ WRONG - Creates new array each iteration (O(n²))
+$results = @()
+foreach ($item in $largeCollection) {
+    $results += Process-Item $item
+}
+
+# ✅ CORRECT - Capture output directly (O(n))
+$results = foreach ($item in $largeCollection) {
+    Process-Item $item
+}
+```
+
 ### File Encoding Pitfalls
 
 **Problem:** Byte Order Mark (BOM) issues
+
 ```powershell
 # ❌ WRONG - Files saved with UTF-8 BOM can cause parsing errors
-# The BOM character at start of file: ﻿#Requires -Version 5.1
+# The BOM character at start of file: ï»¿#Requires -Version 5.1
 
 # ✅ CORRECT - Save files as UTF-8 without BOM
 #Requires -Version 5.1
@@ -500,6 +1274,7 @@ $script:RequestTimes = @($script:RequestTimes | Where-Object { $_ -gt $cutoffTim
 ### Error Handling Pitfalls
 
 **Problem:** Not capturing error details immediately
+
 ```powershell
 # ❌ WRONG - Error details may be lost
 catch {
@@ -512,6 +1287,26 @@ catch {
     $currentError = $_  # Capture immediately
     Write-Log "Some other operation"
     Write-Error "Failed: $($currentError.Exception.Message)"
+}
+```
+
+**Problem:** Forgetting resource cleanup
+
+```powershell
+# ❌ WRONG - Connection may remain open on error
+$conn = New-SqlConnection
+$conn.Open()
+# Do work...
+$conn.Close()  # Never reached if error occurs!
+
+# ✅ CORRECT - Guaranteed cleanup
+$conn = $null
+try {
+    $conn = New-SqlConnection
+    $conn.Open()
+    # Do work...
+} finally {
+    if ($conn) { $conn.Close() }
 }
 ```
 
@@ -549,11 +1344,13 @@ param(
     [string]$UserName,
 
     [Parameter(Mandatory=$true)]
-    [ValidateSet('Enable','Disable')]
+    [ValidateSet('Enable','Disable', IgnoreCase=$true)]
     [string]$Action,
 
     [Parameter()]
-    [System.Management.Automation.PSCredential]$Credential
+    [System.Management.Automation.PSCredential]
+    [System.Management.Automation.Credential()]
+    $Credential = [System.Management.Automation.PSCredential]::Empty
 )
 
 #region Helper Functions (if needed)
@@ -584,31 +1381,35 @@ try {
 
     if ($PSCmdlet.ShouldProcess($target, $what)) {
         # Connect to AD (if needed, using Credential)
-        if ($Credential) {
+        if ($Credential -ne [System.Management.Automation.PSCredential]::Empty) {
             Write-Verbose "Connecting to AD with provided credentials"
             Import-Module ActiveDirectory -ErrorAction Stop
         }
 
         Write-ActionLog "Starting $Action operation" $UserName $Action
-        
+
         if ($Action -eq 'Disable') {
             $params = @{
                 Identity = $UserName
                 ErrorAction = 'Stop'
             }
-            if ($Credential) { $params.Credential = $Credential }
+            if ($Credential -ne [System.Management.Automation.PSCredential]::Empty) { 
+                $params.Credential = $Credential 
+            }
             Disable-ADAccount @params
         } else {
             $params = @{
                 Identity = $UserName
                 ErrorAction = 'Stop'
             }
-            if ($Credential) { $params.Credential = $Credential }
+            if ($Credential -ne [System.Management.Automation.PSCredential]::Empty) { 
+                $params.Credential = $Credential 
+            }
             Enable-ADAccount @params
         }
 
         Write-ActionLog "Successfully completed $Action operation" $UserName $Action
-        
+
         # Output structured result object
         $result = [PSCustomObject]@{
             UserName = $UserName
@@ -621,7 +1422,7 @@ try {
 
     } else {
         Write-Verbose "ShouldProcess declined action. No changes made to $UserName."
-        
+
         # Output result for WhatIf scenarios
         $result = [PSCustomObject]@{
             UserName = $UserName
@@ -637,10 +1438,10 @@ catch {
     # Capture error details immediately
     $errorDetails = $_
     $errorMessage = "Failed to {0} user {1}: {2}" -f $Action, $UserName, $errorDetails.Exception.Message
-    
+
     Write-Error $errorMessage
     Write-ActionLog "Error occurred: $($errorDetails.Exception.Message)" $UserName $Action
-    
+
     # Output failure object
     $result = [PSCustomObject]@{
         UserName = $UserName
@@ -655,7 +1456,7 @@ catch {
 finally {
     # Cleanup - always runs regardless of success/failure
     Write-Verbose "Script completed at $(Get-Date)"
-    
+
     if ($PSBoundParameters.ContainsKey('Verbose')) {
         Stop-Transcript | Out-Null
     }
@@ -667,7 +1468,7 @@ finally {
 * Uses `#Requires` to ensure minimum PS version and module availability.
 * Comment-based help provides Synopsis, Description, Parameters, Examples.
 * `[CmdletBinding()]` with `SupportsShouldProcess` enables `-WhatIf`/`-Confirm` usage.
-* Parameters have validation (`ValidateNotNullOrEmpty`, `ValidateSet`) and support secure credential input.
+* Parameters have validation (`ValidateNotNullOrEmpty`, `ValidateSet` with IgnoreCase) and support secure credential input with proper [Credential()] pattern.
 * **Linear script structure** - no begin/process/end blocks at top level, which would cause parsing errors in .ps1 files.
 * Helper functions defined in a region for organisation and reusability.
 * `Set-StrictMode -Latest` is called for robust variable usage.
@@ -680,3 +1481,8 @@ finally {
 * On both success and failure, outputs structured PSCustomObject results for pipeline compatibility.
 * Avoids `Write-Host` entirely – all user-facing info is via appropriate streams (Verbose, Error).
 * **Finally block** ensures cleanup always occurs, even if errors happen (stopping transcript).
+* Proper credential handling with [PSCredential]::Empty to distinguish optional credentials.
+
+---
+
+*Updated August 2025: Enhanced with detailed naming conventions, performance comparisons, deprecated cmdlet replacements, native cmdlet usage guidance, corrected patterns for switch parameters and credential handling, PowerShell version considerations, expanded Invoke-Expression alternatives with safe examples, detailed explanation of terminating vs non-terminating errors, comprehensive Pester testing example, and new section on handling external commands and native executables.*
