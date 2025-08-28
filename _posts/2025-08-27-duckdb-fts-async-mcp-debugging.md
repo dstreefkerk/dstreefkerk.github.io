@@ -5,11 +5,13 @@ date: 2025-08-27
 categories: debugging database mcp python
 tags: duckdb mcp async debugging race-conditions claude-code
 author: Daniel Streefkerk
+excerpt: "A cautionary tale for about vibe coding utilities that combine synchronous and asynchronous code."
 ---
 
 ## The Deceptively Simple Setup
 
 I was using Claude Code to build a MCP server into Detection Nexus, a security detection rule database that I'm working on. After some research, the architecture seemed straightforward:
+
 - FastMCP framework for protocol handling, I'd used it before on previous projects
 - DuckDB for fast queries with Full-Text Search (FTS)
 - BM25 scoring for relevance ranking
@@ -21,6 +23,7 @@ The server worked perfectly in isolation and the core repository features worked
 Once I connected the MCP Server to a client like Claude Desktop, the first search query would hang indefinitely. Not a slow response - an infinite hang. The MCP client would wait forever for a response that would never arrive. I even left it running overnight and came back to find it still waiting after 6+ hours.
 
 This pattern was consistent:
+
 1. Server already running → Query works immediately ✅
 2. Server restart → First query hangs forever ❌
 3. Cancel and immediately retry → Query works immediately ✅
@@ -64,7 +67,7 @@ Next theory: timeout mechanism was causing the hangs. The MCP server used `run_w
 def run_with_timeout(func, timeout_seconds: int, *args, **kwargs):
     def target():
         result[0] = func(*args, **kwargs)  # Uses shared database connection!
-    
+
     thread = threading.Thread(target=target)
     thread.start()
     thread.join(timeout_seconds)
@@ -72,6 +75,7 @@ def run_with_timeout(func, timeout_seconds: int, *args, **kwargs):
 ```
 
 Critical issues:
+
 - **Thread Safety Violation:** DuckDB connections are not thread-safe
 - **Database Connection Contention:** Multiple threads compete for same connection
 - **Deadlock Scenarios:** Threads block indefinitely waiting for database locks
@@ -94,6 +98,7 @@ MCP Server → SearchEngine → SearchDatabase
 ```
 
 Why SearchService was wrong:
+
 - Single-threaded application: MCP server processes one request at a time
 - Pool overhead: Locking and validation for no concurrency benefit
 - Complex layering: 300+ lines of pooling code that wasn't needed
@@ -150,41 +155,41 @@ The server needed proper initialisation sequencing:
 class DetectionNexusMcpServer:
     def __init__(self):
         # ... basic setup ...
-        
+
         # CRITICAL: Don't declare ready until database is warmed up
         self._database_ready = False
         self._initialization_error = None
-        
+
         # 4-phase warmup sequence
         self._warmup_database()
-    
+
     def _warmup_database(self) -> bool:
         try:
             # Phase 1: Health check validation
             health_status = self._search_database.health_check()
-            
+
             # Phase 2: Index warming (touch all major indexes)
             self._warm_indexes()
-            
+
             # Phase 3: Search engine cache warming
             self._warm_search_cache()
-            
+
             # Phase 4: Performance validation
             self._validate_performance()
-            
+
             self._database_ready = True
             return True
         except Exception as e:
             self._initialization_error = str(e)
             return False
-    
+
     def search_rules(self, query: str, limit: int = 10):
         # Check readiness before processing ANY requests
         if not self._database_ready:
             if self._initialization_error:
                 raise RuntimeError(f"Database initialization failed: {self._initialization_error}")
             raise RuntimeError("Database still initializing, please wait")
-        
+
         # Now proceed with actual search
         return self._search_engine.search(query, limit)
 ```
@@ -194,32 +199,32 @@ class DetectionNexusMcpServer:
 ```python
 def health_check(self) -> Dict[str, Any]:
     """Comprehensive health check covering all failure modes"""
-    
+
     # Test actual query performance, not just connectivity
     start_time = time.time()
-    
+
     try:
         # Verify indexes are loaded and responsive
         result = self.connection.execute("SELECT COUNT(*) FROM rules").fetchone()
         index_time = (time.time() - start_time) * 1000
-        
+
         # Check WAL file status (can indicate lock issues)
         wal_check = self._check_wal_status()
-        
+
         # Validate schema accessibility
         schema_check = self._validate_schema_tables()
-        
+
         # Performance threshold check
         if index_time > 1000:  # More than 1 second is concerning
             return {"status": "degraded", "reason": f"Slow index response: {index_time:.1f}ms"}
-        
+
         return {
             "status": "healthy",
             "index_response_time": f"{index_time:.1f}ms",
             "wal_status": wal_check,
             "schema_tables": schema_check
         }
-    
+
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
 ```
@@ -236,7 +241,7 @@ def _warm_indexes(self):
         "SELECT COUNT(*) FROM mitre_techniques"
         # Add queries that touch your major indexes
     ]
-    
+
     for query in warmup_queries:
         self.connection.execute(query).fetchone()
 ```
@@ -244,10 +249,12 @@ def _warm_indexes(self):
 ## Results
 
 **Before (Broken):**
+
 - First query after restart: Hang indefinitely ❌
 - User experience: Frustrating retry-until-it-works ❌
 
 **After (Fixed):**
+
 - Server startup: 60-77ms with comprehensive warmup ✅
 - First query after restart: 2ms response time ✅
 - User experience: Reliable every time ✅
