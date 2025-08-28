@@ -5,7 +5,7 @@ date: 2025-08-27
 categories: debugging database mcp python
 tags: duckdb mcp async debugging race-conditions claude-code
 author: Daniel Streefkerk
-excerpt: "A cautionary tale for about vibe coding utilities that combine synchronous and asynchronous code."
+excerpt: "A cautionary tale about vibe coding utilities that combine synchronous and asynchronous code."
 ---
 
 ## The Deceptively Simple Setup
