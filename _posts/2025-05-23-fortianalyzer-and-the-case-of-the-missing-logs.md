@@ -26,7 +26,7 @@ A PRI header is the priority field in syslog messages (like <164>) that combines
 Before diving into the solution, let's map out the data flow:
 
 ```
-FortiAnalyzer → rsyslog (UDP 514) → Processing → AMA (TCP 28330) → Sentinel
+FortiAnalyzer -> rsyslog (UDP 514) -> Processing -> AMA (TCP 28330) -> Sentinel
 ```
 
 The challenge is intercepting those raw CEF messages and transforming them into something AMA will accept, while simultaneously filtering out the noise before it hits your ingestion costs.
@@ -38,7 +38,7 @@ After examining how the default AMA rsyslog configuration handles incoming syslo
 We ended up with the following data flow instead:
 
 ```
-FortiAnalyzer → rsyslog (UDP 1514) → Processing → AMA (TCP 28330) → Sentinel
+FortiAnalyzer -> rsyslog (UDP 1514) -> Processing -> AMA (TCP 28330) -> Sentinel
 ```
 
 ### 1. Receive and Validate
@@ -108,9 +108,7 @@ After implementing this configuration, the logs are actually making their way th
 3. **DCR Configuration**: Ensure your Data Collection Rule is expecting LOG_LOCAL4:LOG_WARNING. There's potential to waste hours troubleshooting if it's configured for a different facility/severity combination.
 
 ## Wrapping Up
-This solution might feel a bit hacky—and honestly, it is. We're essentially working around a vendor compatibility issue that really shouldn't exist. But in the real world of enterprise security, these kinds of workarounds are often necessary to get disparate systems talking to each other.
-
-The upside is that we've turned a compatibility headache into an opportunity to implement intelligent filtering, reducing both ingestion costs and analyst noise. Sometimes the best solutions come from making the best of a less-than-ideal situation.
+While this is essentially a bit of a hack/workaround, we're addressing a vendor compatibility issue that really shouldn't exist. In the real world of enterprise security, these kinds of workarounds are often necessary to get disparate systems talking to each other.
 
 If you're facing similar FortiAnalyzer integration challenges, hopefully this saves you some of the trial and error I went through.
 
