@@ -113,14 +113,48 @@ Key differences from rsyslog:
 
 ## Update: Severity Filtering Strategy
 
-Initially, we filtered based on deviceSeverity fields. However, production testing revealed this caused missing logs. The revised approach forwards ALL UTM logs (type="utm") regardless of severity, ensuring complete security visibility while still filtering out non-security events like traffic logs and system events.
+Initially, I filtered FortiAnalyzer logs at the rsyslog level based on their threat scoring fields (only forwarding logs with `ad.crlevel=critical`, `high`, or `medium`). The goal was to reduce noise and ingestion costs by dropping lower-severity events before they reached Azure.
 
-This change was crucial because:
-- Not all critical security events have high severity ratings
-- UTM events encompass IPS, antivirus, web filtering, and other security functions
-- Traffic and system logs generate the bulk of noise without security value
+However, a client implementing this configuration reported they weren't seeing their "Threat logs" in Sentinel. After investigation, we discovered a fundamental misunderstanding about how Fortinet structures its logs.
 
-If you want to filter, you can do that on the FortiAnalyzer end: https://docs.fortinet.com/document/fortianalyzer/7.6.3/administration-guide/19991/configuring-log-forwarding
+### The Real Problem: Not All Security Events Have Threat Scores
+
+Here's what I learned: Fortinet doesn't have separate "Threat logs". What people call "Threat logs" are actually just UTM logs that happen to have threat weight scoring fields (`crlevel`, `crscore`, `craction`). 
+
+My original filter:
+```bash
+if re_match($rawmsg, "ad.crlevel=(critical|high|medium)") then {
+    # Forward only logs with threat scoring
+}
+```
+
+This was excluding many important UTM security events because:
+- Not all UTM events trigger threat weight scoring
+- Many security events (like certain IPS detections or web filtering) don't get `crlevel` fields
+- The filter was looking for something that simply wasn't there in many security logs
+
+### The Working Solution
+
+The fix was simple - forward ALL UTM logs regardless of threat scoring:
+
+```bash
+if ($rawmsg contains 'type="utm"') then {
+    # Forward all security-relevant events
+}
+```
+
+This captures:
+- UTM logs WITH threat scoring (what the client called "Threat logs")
+- UTM logs WITHOUT threat scoring (equally important security events)
+- All IPS, antivirus, web filtering, app control, and other security functions
+
+Traffic and system logs are still filtered out, which is where the real noise comes from.
+
+### The Lesson Learned
+
+Don't filter security logs based on severity or threat scores at the ingestion point. You'll inevitably miss important events because vendor severity classifications rarely align with what's actually important for your security posture. 
+
+If you need to reduce volume, do it at the source (FortiAnalyzer) where you have full context: https://docs.fortinet.com/document/fortianalyzer/7.6.3/administration-guide/19991/configuring-log-forwarding
 
 ## Testing and Validation
 
