@@ -111,7 +111,7 @@ The technique demonstrates how functional requirements (solving SPF lookup limit
 
 ## Script
 
-I've built a script that automates this process for a given domain, you can check it out in my GitHub repo here: https://github.com/dstreefkerk/PowerShell/blob/master/Infosec-Related/Invoke-ProofpointSPFFingerprint.ps1
+I've built a script that automates this process for a given domain, you can check it out in my GitHub repo [here](https://github.com/dstreefkerk/PowerShell/blob/master/Infosec-Related/Invoke-ProofpointSPFFingerprint.ps1).
 
 Example output:
 ```powershell
