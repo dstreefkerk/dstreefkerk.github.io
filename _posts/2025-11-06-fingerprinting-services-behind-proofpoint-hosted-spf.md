@@ -8,9 +8,9 @@ author: "Daniel Streefkerk"
 excerpt: "A technique for fingerprinting which third-party email services organisations have authorised through their Proofpoint Hosted SPF implementation."
 ---
 
-When applying for jobs, I always perform OSINT recon on their security posture before deciding whether to proceed. Part of that involves knowing what their email security posture looks like, and which services they're using to send emails. In one such case, I recently noticed they were using Proofpoint's Hosted SPF service. 
+When applying for jobs, I always perform OSINT recon on their security posture before deciding whether to proceed. Part of that involves knowing what their email security posture looks like, and which services they're using to send emails. In one such case recently, I noticed they were using Proofpoint's Hosted SPF service. 
 
-Having implemented this for clients previously, I knew the macro-based SPF implementation could be queried to reveal their authorised email services. Here's the technique for systematically fingerprinting an organisation's email service landscape through Proofpoint's infrastructure.
+Having implemented this for clients previously, I knew that the macro-based SPF implementation could be queried to reveal any authorised email services. Here's the technique for systematically fingerprinting an organisation's email service landscape through Proofpoint's infrastructure.
 
 ## Background: Proofpoint's Macro-Based SPF
 
