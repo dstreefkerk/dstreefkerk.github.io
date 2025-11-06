@@ -98,6 +98,7 @@ Organisations using Proofpoint Hosted SPF should understand that:
 
 1. Obscurity does not equal security
 2. Authorised email services are still enumerable through DNS queries
+3. They should be preferencing the use of DKIM over SPF to denote authorised email services wherever possible
 
 ## Use Cases
 
